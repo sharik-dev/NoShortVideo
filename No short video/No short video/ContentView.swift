@@ -7,15 +7,24 @@
 
 import SwiftUI
 
+/// Root view: full‑screen YouTube web view with a bottom toolbar.
 struct ContentView: View {
+
+    @StateObject private var viewModel = YouTubeWebViewModel()
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        VStack(spacing: 0) {
+            YouTubeWebView(webView: viewModel.webView)
+                .ignoresSafeArea(edges: .top)
+
+            ToolbarView(viewModel: viewModel)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
         }
-        .padding()
+        .padding(.top, 4)
+        .onAppear {
+            viewModel.loadYouTube()
+        }
     }
 }
 
