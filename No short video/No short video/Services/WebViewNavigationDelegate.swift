@@ -13,6 +13,9 @@ final class WebViewNavigationDelegate: NSObject, WKNavigationDelegate {
 
     private let state: WebViewState
 
+    /// Called when a page finishes loading (used for resume-seek).
+    var onDidFinish: (() -> Void)?
+
     init(state: WebViewState) {
         self.state = state
     }
@@ -44,6 +47,8 @@ final class WebViewNavigationDelegate: NSObject, WKNavigationDelegate {
         updateState(from: webView, isLoading: false)
         // Final pass to catch any late‑loaded Shorts.
         webView.evaluateJavaScript(ScriptInjectionService.allScripts, completionHandler: nil)
+        // Notify ViewModel for pending seek.
+        onDidFinish?()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -67,6 +72,18 @@ final class WebViewNavigationDelegate: NSObject, WKNavigationDelegate {
             self?.state.isLoading = isLoading
             self?.state.currentURL = webView.url
             self?.state.pageTitle = webView.title ?? ""
+
+            // Detect if we are on a video watch page
+            if let url = webView.url,
+               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+               let videoId = components.queryItems?.first(where: { $0.name == "v" })?.value,
+               !videoId.isEmpty {
+                self?.state.isOnVideoPage = true
+                self?.state.currentVideoId = videoId
+            } else {
+                self?.state.isOnVideoPage = false
+                self?.state.currentVideoId = ""
+            }
         }
     }
 }

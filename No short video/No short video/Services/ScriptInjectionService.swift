@@ -115,6 +115,131 @@ enum ScriptInjectionService {
         """
     }
 
+    /// JavaScript that extracts video metadata using MULTIPLE strategies simultaneously.
+    /// At least one should succeed on mobile YouTube SPA.
+    static var videoInfoScript: String {
+        """
+        (function() {
+            var videoId = '';
+            var title = document.title || '';
+            var video = document.querySelector('video');
+            var currentTime = video ? video.currentTime : 0;
+            var duration = video ? video.duration : 0;
+
+            // Strategy 1: URL search params (?v=...)
+            try {
+                var p = new URLSearchParams(window.location.search);
+                if (p.get('v')) videoId = p.get('v');
+            } catch(e) {}
+
+            // Strategy 2: canonical link
+            if (!videoId) {
+                try {
+                    var canon = document.querySelector('link[rel="canonical"]');
+                    if (canon) {
+                        var m = canon.href.match(/[?&]v=([^&]+)/);
+                        if (m) videoId = m[1];
+                        if (!videoId) {
+                            m = canon.href.match(/\\/watch\\/([^?&/]+)/);
+                            if (m) videoId = m[1];
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            // Strategy 3: og:url meta tag
+            if (!videoId) {
+                try {
+                    var og = document.querySelector('meta[property="og:url"]');
+                    if (og) {
+                        var m = og.content.match(/[?&]v=([^&]+)/);
+                        if (m) videoId = m[1];
+                    }
+                } catch(e) {}
+            }
+
+            // Strategy 4: og:title for better title
+            try {
+                var ogTitle = document.querySelector('meta[property="og:title"]');
+                if (ogTitle && ogTitle.content) title = ogTitle.content;
+            } catch(e) {}
+
+            // Strategy 5: parse full href with regex
+            if (!videoId) {
+                try {
+                    var href = window.location.href;
+                    var m = href.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+                    if (m) videoId = m[1];
+                    if (!videoId) {
+                        m = href.match(/youtu\\.be\\/([a-zA-Z0-9_-]{11})/);
+                        if (m) videoId = m[1];
+                    }
+                } catch(e) {}
+            }
+
+            // Strategy 6: ytInitialPlayerResponse
+            if (!videoId) {
+                try {
+                    if (typeof ytInitialPlayerResponse !== 'undefined' && ytInitialPlayerResponse.videoDetails) {
+                        videoId = ytInitialPlayerResponse.videoDetails.videoId || '';
+                        if (!title || title === 'YouTube') {
+                            title = ytInitialPlayerResponse.videoDetails.title || title;
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            // Strategy 7: video source URL
+            if (!videoId && video && video.src) {
+                try {
+                    var m = video.src.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+                    if (m) videoId = m[1];
+                } catch(e) {}
+            }
+
+            // Strategy 8: any link on page that looks like current watch
+            if (!videoId) {
+                try {
+                    var links = document.querySelectorAll('a[href*="watch?v="]');
+                    for (var i = 0; i < links.length; i++) {
+                        var cl = links[i].closest('.currently-playing, .active, [aria-current]');
+                        if (cl) {
+                            var m = links[i].href.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+                            if (m) { videoId = m[1]; break; }
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            // Clean title
+            title = title.replace(' - YouTube', '').replace(' — YouTube', '');
+
+            var result = {
+                videoId: videoId,
+                title: title,
+                currentTime: currentTime,
+                duration: duration,
+                url: window.location.href,
+                hasVideo: !!video
+            };
+            return JSON.stringify(result);
+        })();
+        """
+    }
+
+    /// JavaScript to seek the video to a specific time.
+    static func seekScript(to seconds: Double) -> String {
+        """
+        (function() {
+            var video = document.querySelector('video');
+            if (video) {
+                video.currentTime = \(seconds);
+                video.play();
+            }
+        })();
+        """
+    }
+
     // MARK: - Combined
 
     /// All injection scripts combined.

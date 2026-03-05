@@ -16,4 +16,6 @@ final class WebViewState: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var currentURL: URL?
     @Published var pageTitle: String = ""
+    @Published var isOnVideoPage: Bool = false
+    @Published var currentVideoId: String = ""
 }
