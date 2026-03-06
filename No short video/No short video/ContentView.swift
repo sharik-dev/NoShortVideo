@@ -12,19 +12,49 @@ struct ContentView: View {
 
     @StateObject private var viewModel = YouTubeWebViewModel()
     @State private var showLibrary = false
+    @State private var showToolbar = true
 
     var body: some View {
         ZStack(alignment: .bottom) {
             // Web view — respects notch
             YouTubeWebView(webView: viewModel.webView)
 
-            // Bottom toolbar
-            VStack(spacing: 0) {
-                Spacer()
+            // Bottom bar: full toolbar OR collapsed bubble
+            if showToolbar {
+                // ── Expanded toolbar ──
+                VStack(spacing: 0) {
+                    Spacer()
 
-                ToolbarView(viewModel: viewModel, showLibrary: $showLibrary)
+                    ToolbarView(viewModel: viewModel, showLibrary: $showLibrary) {
+                        withAnimation(.spring(response: 0.35)) {
+                            showToolbar = false
+                        }
+                        viewModel.setBottomMargin(visible: false)
+                    }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                // ── Collapsed bubble ──
+                HStack {
+                    Spacer()
+                    Button {
+                        withAnimation(.spring(response: 0.35)) {
+                            showToolbar = true
+                        }
+                        viewModel.setBottomMargin(visible: true)
+                    } label: {
+                        Image(systemName: "ellipsis.circle.fill")
+                            .font(.system(size: 40))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color(.systemGray2))
+                            .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 14)
+                }
+                .transition(.scale.combined(with: .opacity))
             }
 
             // Save feedback toast

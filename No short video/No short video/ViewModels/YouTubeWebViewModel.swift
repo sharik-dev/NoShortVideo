@@ -118,6 +118,12 @@ final class YouTubeWebViewModel: ObservableObject {
         loadYouTube()
     }
 
+    /// Adds or removes the bottom padding on the page depending on toolbar visibility.
+    func setBottomMargin(visible: Bool) {
+        let px = visible ? "60px" : "0px"
+        webView.evaluateJavaScript("document.body.style.paddingBottom = '\(px)';", completionHandler: nil)
+    }
+
     // MARK: - Video Save (Always Enabled)
 
     /// Saves the current page. Tries JS extraction first, then falls back to URL parsing.

@@ -12,6 +12,7 @@ struct ToolbarView: View {
 
     @ObservedObject var viewModel: YouTubeWebViewModel
     @Binding var showLibrary: Bool
+    var onCollapse: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -39,6 +40,11 @@ struct ToolbarView: View {
 
             toolbarButton(icon: "house", disabled: false) {
                 viewModel.goHome()
+            }
+
+            // Minimize — collapse toolbar into a bubble
+            toolbarButton(icon: "chevron.down", disabled: false) {
+                onCollapse()
             }
         }
         .padding(.vertical, 10)

@@ -240,11 +240,28 @@ enum ScriptInjectionService {
         """
     }
 
+    // MARK: - Bottom Margin
+
+    /// Adds bottom padding to the page so the app's floating toolbar
+    /// doesn't cover YouTube's native tab bar.
+    static var bottomMarginScript: String {
+        """
+        (function() {
+            function addBottomMargin() {
+                document.body.style.paddingBottom = '60px';
+            }
+            addBottomMargin();
+            var observer = new MutationObserver(function() { addBottomMargin(); });
+            observer.observe(document.body, { childList: true, subtree: true });
+        })();
+        """
+    }
+
     // MARK: - Combined
 
     /// All injection scripts combined.
     static var allScripts: String {
-        hideShortsScript + "\n" + hideAdsScript
+        hideShortsScript + "\n" + hideAdsScript + "\n" + bottomMarginScript
     }
 
     /// Returns a `WKUserScript` ready to be added to a content controller.
