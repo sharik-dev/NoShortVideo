@@ -7,57 +7,36 @@
 
 import SwiftUI
 
-/// Root view: full‑screen YouTube web view with a modern bottom toolbar.
+/// Root view: full‑screen YouTube web view with an adaptive toolbar.
+/// iPhone → bottom bar.  iPad / Mac → right‑side bar.
 struct ContentView: View {
 
     @StateObject private var viewModel = YouTubeWebViewModel()
     @State private var showLibrary = false
     @State private var showToolbar = true
 
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var isCompact: Bool { sizeClass == .compact }
+
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // Web view — respects notch
-            YouTubeWebView(webView: viewModel.webView)
-
-            // Bottom bar: full toolbar OR collapsed bubble
-            if showToolbar {
-                // ── Expanded toolbar ──
-                VStack(spacing: 0) {
-                    Spacer()
-
-                    ToolbarView(viewModel: viewModel, showLibrary: $showLibrary) {
-                        withAnimation(.spring(response: 0.35)) {
-                            showToolbar = false
-                        }
-                        viewModel.setBottomMargin(visible: false)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
+        ZStack {
+            // Main layout: web view + optional toolbar
+            if isCompact {
+                // ── iPhone: toolbar at bottom ──
+                ZStack(alignment: .bottom) {
+                    YouTubeWebView(webView: viewModel.webView)
+                    bottomToolbarLayer
                 }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
-                // ── Collapsed bubble ──
-                HStack {
-                    Spacer()
-                    Button {
-                        withAnimation(.spring(response: 0.35)) {
-                            showToolbar = true
-                        }
-                        viewModel.setBottomMargin(visible: true)
-                    } label: {
-                        Image(systemName: "ellipsis.circle.fill")
-                            .font(.system(size: 40))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color(.systemGray2))
-                            .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
-                    }
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 14)
+                // ── iPad / Mac: toolbar at trailing edge ──
+                HStack(spacing: 0) {
+                    YouTubeWebView(webView: viewModel.webView)
+                    trailingToolbarLayer
                 }
-                .transition(.scale.combined(with: .opacity))
             }
 
-            // Save feedback toast
+            // Save feedback toast (always on top)
             if viewModel.showSavedFeedback {
                 savedToast
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -75,6 +54,66 @@ struct ContentView: View {
         } message: {
             Text(viewModel.saveErrorMessage)
         }
+    }
+
+    // MARK: - Bottom Toolbar (iPhone)
+
+    @ViewBuilder
+    private var bottomToolbarLayer: some View {
+        if showToolbar {
+            VStack(spacing: 0) {
+                Spacer()
+                ToolbarView(viewModel: viewModel, showLibrary: $showLibrary) {
+                    withAnimation(.spring(response: 0.35)) { showToolbar = false }
+                    viewModel.setBottomMargin(visible: false)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else {
+            collapsedBubble(edge: .bottom)
+        }
+    }
+
+    // MARK: - Trailing Toolbar (iPad / Mac)
+
+    @ViewBuilder
+    private var trailingToolbarLayer: some View {
+        if showToolbar {
+            ToolbarView(viewModel: viewModel, showLibrary: $showLibrary) {
+                withAnimation(.spring(response: 0.35)) { showToolbar = false }
+            }
+            .padding(.vertical, 12)
+            .padding(.trailing, 6)
+            .transition(.move(edge: .trailing).combined(with: .opacity))
+        } else {
+            collapsedBubble(edge: .trailing)
+        }
+    }
+
+    // MARK: - Collapsed Bubble
+
+    private func collapsedBubble(edge: Edge) -> some View {
+        VStack {
+            if edge == .bottom { Spacer() }
+            HStack {
+                if edge == .trailing || edge == .bottom { Spacer() }
+                Button {
+                    withAnimation(.spring(response: 0.35)) { showToolbar = true }
+                    if isCompact { viewModel.setBottomMargin(visible: true) }
+                } label: {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 40))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color(.systemGray2))
+                        .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
+                }
+                .padding(edge == .bottom ? .bottom : .trailing, 14)
+                .padding(edge == .bottom ? .trailing : .top, 20)
+            }
+        }
+        .transition(.scale.combined(with: .opacity))
     }
 
     // MARK: - Saved Toast

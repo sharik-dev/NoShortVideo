@@ -7,15 +7,23 @@
 
 import SwiftUI
 
-/// Modern bottom navigation toolbar with proper contrast in both light and dark mode.
+/// Adaptive toolbar: horizontal bottom bar on iPhone, vertical right bar on iPad/Mac.
 struct ToolbarView: View {
 
     @ObservedObject var viewModel: YouTubeWebViewModel
     @Binding var showLibrary: Bool
     var onCollapse: () -> Void
 
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var isCompact: Bool { sizeClass == .compact }
+
     var body: some View {
-        HStack(spacing: 0) {
+        let layout = isCompact
+            ? AnyLayout(HStackLayout(spacing: 0))
+            : AnyLayout(VStackLayout(spacing: 0))
+
+        layout {
             toolbarButton(icon: "chevron.left", disabled: !viewModel.webViewState.canGoBack) {
                 viewModel.goBack()
             }
@@ -43,11 +51,11 @@ struct ToolbarView: View {
             }
 
             // Minimize — collapse toolbar into a bubble
-            toolbarButton(icon: "chevron.down", disabled: false) {
+            toolbarButton(icon: isCompact ? "chevron.down" : "chevron.right", disabled: false) {
                 onCollapse()
             }
         }
-        .padding(.vertical, 10)
+        .padding(isCompact ? .vertical : .horizontal, 10)
         .background(
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color(.systemBackground).opacity(0.85))
@@ -55,7 +63,7 @@ struct ToolbarView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .stroke(Color(.systemGray4), lineWidth: 1)
                 )
-                .shadow(color: .black.opacity(0.12), radius: 10, y: -3)
+                .shadow(color: .black.opacity(0.12), radius: 10, y: isCompact ? -3 : 0)
         )
     }
 
@@ -74,8 +82,8 @@ struct ToolbarView: View {
                     disabled ? Color(.systemGray3) :
                     accent ? Color.red : Color(.label)
                 )
-                .frame(maxWidth: .infinity)
-                .frame(height: 38)
+                .frame(maxWidth: isCompact ? .infinity : nil)
+                .frame(width: isCompact ? nil : 38, height: 38)
                 .contentShape(Rectangle())
         }
         .disabled(disabled)

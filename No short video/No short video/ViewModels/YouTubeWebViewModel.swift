@@ -48,8 +48,14 @@ final class YouTubeWebViewModel: ObservableObject {
         // Cookie / session persistence
         configuration.websiteDataStore = WKWebsiteDataStore.default()
 
-        // Create web view
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        // On iPhone: force mobile site. On iPad/Mac: let YouTube serve the desktop site.
+        let prefs = WKWebpagePreferences()
+        let isCompact = UIDevice.current.userInterfaceIdiom == .phone
+        prefs.preferredContentMode = isCompact ? .mobile : .recommended
+        configuration.defaultWebpagePreferences = prefs
+
+        // Create web view (custom subclass hides keyboard accessory bar)
+        let webView = NoInputAccessoryWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
 
         // Navigation delegate

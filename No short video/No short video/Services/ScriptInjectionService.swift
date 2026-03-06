@@ -260,8 +260,13 @@ enum ScriptInjectionService {
     // MARK: - Combined
 
     /// All injection scripts combined.
+    /// Bottom margin is only added on iPhone where the toolbar sits at the bottom.
     static var allScripts: String {
-        hideShortsScript + "\n" + hideAdsScript + "\n" + bottomMarginScript
+        var scripts = hideShortsScript + "\n" + hideAdsScript
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            scripts += "\n" + bottomMarginScript
+        }
+        return scripts
     }
 
     /// Returns a `WKUserScript` ready to be added to a content controller.
