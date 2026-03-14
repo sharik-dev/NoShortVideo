@@ -146,12 +146,19 @@ final class YouTubeWebViewModel: ObservableObject {
         loadYouTube()
     }
 
-    /// Triggers Picture-in-Picture by clicking the injected PiP overlay button.
+    /// Triggers Picture-in-Picture directly via the video element API.
     func triggerPiP() {
-        webView.evaluateJavaScript(
-            "document.getElementById('_meowtube_pip')?.click();",
-            completionHandler: nil
-        )
+        webView.evaluateJavaScript("""
+            (function(){
+                var v = document.querySelector('video');
+                if (!v) return;
+                if (document.pictureInPictureElement) {
+                    document.exitPictureInPicture().catch(function(){});
+                } else if ('requestPictureInPicture' in v) {
+                    v.requestPictureInPicture().catch(function(){});
+                }
+            })();
+            """, completionHandler: nil)
     }
 
     /// Loads any URL directly (used by the browser home favourites).

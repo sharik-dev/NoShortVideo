@@ -356,7 +356,8 @@ enum ScriptInjectionService {
     /// All injection scripts combined.
     /// Bottom margin is only added on iPhone where the toolbar sits at the bottom.
     static var allScripts: String {
-        var scripts = hideShortsScript + "\n" + hideAdsScript + "\n" + pipOverlayScript
+        // pipOverlayScript removed — PiP is handled by the native PiPFloatingButton
+        var scripts = hideShortsScript + "\n" + hideAdsScript
         if UIDevice.current.userInterfaceIdiom == .phone {
             scripts += "\n" + bottomMarginScript
         }

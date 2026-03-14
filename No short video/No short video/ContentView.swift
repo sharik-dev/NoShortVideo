@@ -21,6 +21,8 @@ struct ContentView: View {
     // Draggable collapsed toolbar bubble
     @State     private var bubbleOffset: CGSize  = .zero
     @GestureState private var bubbleDrag: CGSize = .zero
+    // Tracks whether a drag is in progress — prevents the tap from firing on drag release
+    @State private var bubbleDragActive: Bool    = false
 
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var isCompact: Bool { sizeClass == .compact }
@@ -32,7 +34,6 @@ struct ContentView: View {
                     YouTubeWebView(webView: viewModel.webView)
                     bottomToolbarLayer
                 }
-                // Left column: gauge (optional) + PiP button
                 .overlay(alignment: .leading) {
                     VStack(spacing: 14) {
                         Spacer()
@@ -88,7 +89,6 @@ struct ContentView: View {
                     onCollapse: {
                         withAnimation(.spring(response: 0.35)) { showToolbar = false }
                         viewModel.setBottomMargin(visible: false)
-                        // Don't reset bubbleOffset — bubble reappears at last dragged position
                     },
                     onHome:     { showHome     = true },
                     onSettings: { showSettings = true }
@@ -102,36 +102,43 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Draggable collapsed bubble (position persists)
+    // MARK: - Draggable collapsed bubble
+    // Uses .onTapGesture + DragGesture with a guard flag so a drag-release
+    // never accidentally re-opens the toolbar.
 
     private var draggableBubble: some View {
         VStack {
             Spacer()
             HStack {
                 Spacer()
-                Button {
-                    withAnimation(.spring(response: 0.35)) { showToolbar = true }
-                    viewModel.setBottomMargin(visible: true)
-                } label: {
-                    Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 44))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, .ultraThinMaterial)
-                        .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
-                }
-                .buttonStyle(.plain)
-                .offset(x: bubbleOffset.width + bubbleDrag.width,
-                        y: bubbleOffset.height + bubbleDrag.height)
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 4)
-                        .updating($bubbleDrag) { value, state, _ in state = value.translation }
-                        .onEnded { value in
-                            bubbleOffset.width  += value.translation.width
-                            bubbleOffset.height += value.translation.height
-                        }
-                )
-                .padding(.bottom, 18)
-                .padding(.trailing, 18)
+                Image(systemName: "ellipsis.circle.fill")
+                    .font(.system(size: 44))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .ultraThinMaterial)
+                    .shadow(color: .white.opacity(0.25), radius: 12)
+                    .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+                    .offset(x: bubbleOffset.width + bubbleDrag.width,
+                            y: bubbleOffset.height + bubbleDrag.height)
+                    // Tap: only expand if no drag occurred
+                    .onTapGesture {
+                        guard !bubbleDragActive else { return }
+                        withAnimation(.spring(response: 0.35)) { showToolbar = true }
+                        viewModel.setBottomMargin(visible: true)
+                    }
+                    // Drag: accumulate offset, set flag so tap is ignored
+                    .gesture(
+                        DragGesture(minimumDistance: 4)
+                            .onChanged { _ in bubbleDragActive = true }
+                            .updating($bubbleDrag) { v, s, _ in s = v.translation }
+                            .onEnded { v in
+                                bubbleOffset.width  += v.translation.width
+                                bubbleOffset.height += v.translation.height
+                                // Reset after the tap recognizer has already fired
+                                DispatchQueue.main.async { bubbleDragActive = false }
+                            }
+                    )
+                    .padding(.bottom, 18)
+                    .padding(.trailing, 18)
             }
         }
         .transition(.scale.combined(with: .opacity))
