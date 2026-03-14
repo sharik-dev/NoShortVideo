@@ -30,10 +30,10 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		9860D9AB2F5A2A1E00B3BC45 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		9860D9AB2F5A2A1E00B3BC45 /* Exceptions for "No short video" folder in "No short video" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				"Info.plist",
+				Info.plist,
 			);
 			target = 9860D9802F5A2A1C00B3BC45 /* No short video */;
 		};
@@ -43,7 +43,7 @@
 		9860D9832F5A2A1C00B3BC45 /* No short video */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				9860D9AB2F5A2A1E00B3BC45 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				9860D9AB2F5A2A1E00B3BC45 /* Exceptions for "No short video" folder in "No short video" target */,
 			);
 			path = "No short video";
 			sourceTree = "<group>";

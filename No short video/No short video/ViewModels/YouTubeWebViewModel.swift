@@ -145,6 +145,19 @@ final class YouTubeWebViewModel: ObservableObject {
     func goHome() {
         loadYouTube()
     }
+
+    /// Triggers Picture-in-Picture by clicking the injected PiP overlay button.
+    func triggerPiP() {
+        webView.evaluateJavaScript(
+            "document.getElementById('_meowtube_pip')?.click();",
+            completionHandler: nil
+        )
+    }
+
+    /// Loads any URL directly (used by the browser home favourites).
+    func loadURL(_ url: URL) {
+        webView.load(URLRequest(url: url))
+    }
     
     /// Performs a YouTube search with the given query.
     func search(_ query: String) {
@@ -310,10 +323,15 @@ final class YouTubeWebViewModel: ObservableObject {
         }
     }
     
+    private var currentDailyLimitSeconds: Double {
+        let minutes = UserDefaults.standard.integer(forKey: "dailyLimitMinutes")
+        return Double(minutes > 0 ? minutes : 60) * 60
+    }
+
     private func updateSessionProgress() {
         guard let startTime = sessionStartTime else { return }
         let elapsed = Date().timeIntervalSince(startTime)
-        sessionProgress = min(1.0, elapsed / AppConstants.sessionMaxDuration)
+        sessionProgress = min(1.0, elapsed / currentDailyLimitSeconds)
     }
 
     private func startObservingVideoPage() {

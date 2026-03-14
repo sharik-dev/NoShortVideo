@@ -15,6 +15,8 @@ struct TopBarView: View {
     @ObservedObject var viewModel: YouTubeWebViewModel
     @Binding var isVisible: Bool
 
+    @AppStorage("dailyLimitMinutes") private var dailyLimitMinutes: Int = 60
+
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
 
@@ -86,7 +88,7 @@ struct TopBarView: View {
                     Text(sessionLabel)
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(gaugeColor)
-                    Text("/ 1h")
+                    Text("/ \(dailyLimitMinutes) min")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -107,9 +109,9 @@ struct TopBarView: View {
 
                 // Légende
                 HStack(spacing: 10) {
-                    legendDot(.green, "< 30 min")
-                    legendDot(.orange, "30–60 min")
-                    legendDot(.red, "> 1 heure")
+                    legendDot(.green, "< \(dailyLimitMinutes / 2) min")
+                    legendDot(.orange, "\(dailyLimitMinutes / 2)–\(dailyLimitMinutes) min")
+                    legendDot(.red, "> \(dailyLimitMinutes) min")
                     Spacer()
                 }
             }
@@ -138,7 +140,8 @@ struct TopBarView: View {
     // MARK: - Helpers
 
     private var sessionLabel: String {
-        let seconds = Int(viewModel.sessionProgress * AppConstants.sessionMaxDuration)
+        let limitSeconds = Double(dailyLimitMinutes) * 60
+        let seconds = Int(viewModel.sessionProgress * limitSeconds)
         let m = seconds / 60
         let s = seconds % 60
         return String(format: "%d:%02d", m, s)
