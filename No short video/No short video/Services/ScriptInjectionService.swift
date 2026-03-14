@@ -257,12 +257,106 @@ enum ScriptInjectionService {
         """
     }
 
+    // MARK: - Background Audio
+
+    /// Injected at document-start so it runs before YouTube's own scripts.
+    /// Overrides the Visibility API so YouTube cannot detect the app has been
+    /// backgrounded and pause playback.
+    static var backgroundAudioScript: String {
+        """
+        (function() {
+            try {
+                Object.defineProperty(document, 'visibilityState', {
+                    configurable: true,
+                    get: function() { return 'visible'; }
+                });
+                Object.defineProperty(document, 'hidden', {
+                    configurable: true,
+                    get: function() { return false; }
+                });
+            } catch(e) {}
+
+            // Stop YouTube's visibilitychange handlers from firing
+            document.addEventListener('visibilitychange', function(e) {
+                e.stopImmediatePropagation();
+            }, true);
+            document.addEventListener('webkitvisibilitychange', function(e) {
+                e.stopImmediatePropagation();
+            }, true);
+        })();
+        """
+    }
+
+    /// Returns a `WKUserScript` injected at document-start for background audio.
+    static func backgroundAudioUserScript() -> WKUserScript {
+        WKUserScript(
+            source: backgroundAudioScript,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+    }
+
+    // MARK: - PiP Overlay Button
+
+    /// Injects a small floating PiP button whenever a video element is present.
+    /// Tapping it calls the native requestPictureInPicture() API.
+    static var pipOverlayScript: String {
+        """
+        (function() {
+            function injectPipButton() {
+                var video = document.querySelector('video');
+                if (!video || document.getElementById('_meowtube_pip')) return;
+                if (!('requestPictureInPicture' in video)) return;
+
+                var btn = document.createElement('button');
+                btn.id = '_meowtube_pip';
+                btn.textContent = '⛶';
+                btn.style.cssText = [
+                    'position:fixed',
+                    'bottom:80px',
+                    'right:12px',
+                    'z-index:2147483647',
+                    'width:40px',
+                    'height:40px',
+                    'border-radius:10px',
+                    'background:rgba(0,0,0,0.70)',
+                    'color:#fff',
+                    'font-size:20px',
+                    'border:none',
+                    'cursor:pointer',
+                    'display:flex',
+                    'align-items:center',
+                    'justify-content:center',
+                    '-webkit-backdrop-filter:blur(6px)',
+                    'backdrop-filter:blur(6px)'
+                ].join(';');
+
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var v = document.querySelector('video');
+                    if (!v) return;
+                    if (document.pictureInPictureElement) {
+                        document.exitPictureInPicture().catch(function(){});
+                    } else {
+                        v.requestPictureInPicture().catch(function(){});
+                    }
+                });
+                document.body.appendChild(btn);
+            }
+
+            injectPipButton();
+            new MutationObserver(injectPipButton)
+                .observe(document.documentElement, { childList: true, subtree: true });
+        })();
+        """
+    }
+
     // MARK: - Combined
 
     /// All injection scripts combined.
     /// Bottom margin is only added on iPhone where the toolbar sits at the bottom.
     static var allScripts: String {
-        var scripts = hideShortsScript + "\n" + hideAdsScript
+        var scripts = hideShortsScript + "\n" + hideAdsScript + "\n" + pipOverlayScript
         if UIDevice.current.userInterfaceIdiom == .phone {
             scripts += "\n" + bottomMarginScript
         }

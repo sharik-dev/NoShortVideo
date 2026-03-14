@@ -10,4 +10,5 @@ import Foundation
 enum AppConstants {
 
     static let youtubeURL = URL(string: "https://m.youtube.com")!
+    static let sessionMaxDuration: TimeInterval = 3600 // 1 hour in seconds
 }

@@ -17,6 +17,7 @@ final class YouTubeWebViewModel: ObservableObject {
     @Published var showSavedFeedback: Bool = false
     @Published var showSaveError: Bool = false
     @Published var saveErrorMessage: String = ""
+    @Published var sessionProgress: Double = 0.0 // 0.0 to 1.0
 
     // MARK: - Properties
 
@@ -26,6 +27,8 @@ final class YouTubeWebViewModel: ObservableObject {
     private var trackingTimer: Timer?
     private var pendingSeekTime: Double?
     private var urlObservation: NSKeyValueObservation?
+    private var sessionTimer: Timer?
+    private var sessionStartTime: Date?
 
     // MARK: - Init
 
@@ -37,6 +40,8 @@ final class YouTubeWebViewModel: ObservableObject {
 
         // Inject scripts
         let contentController = WKUserContentController()
+        // Must run before YouTube's scripts to override the Visibility API
+        contentController.addUserScript(ScriptInjectionService.backgroundAudioUserScript())
         contentController.addUserScript(ScriptInjectionService.userScript())
         configuration.userContentController = contentController
 
@@ -94,11 +99,28 @@ final class YouTubeWebViewModel: ObservableObject {
 
         // Start observing video page changes for auto-tracking
         startObservingVideoPage()
+
+        // Start session timer
+        startSessionTimer()
+
+        // When the app is backgrounded, YouTube may still pause via its own
+        // player logic. Force a play() call to counteract it.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.webView.evaluateJavaScript(
+                "var v=document.querySelector('video'); if(v&&v.paused) v.play();",
+                completionHandler: nil
+            )
+        }
     }
 
     deinit {
         trackingTimer?.invalidate()
         urlObservation?.invalidate()
+        sessionTimer?.invalidate()
     }
 
     // MARK: - Navigation Actions
@@ -122,6 +144,16 @@ final class YouTubeWebViewModel: ObservableObject {
 
     func goHome() {
         loadYouTube()
+    }
+    
+    /// Performs a YouTube search with the given query.
+    func search(_ query: String) {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+        let searchURLString = "https://m.youtube.com/results?search_query=\(encodedQuery)"
+        if let url = URL(string: searchURLString) {
+            webView.load(URLRequest(url: url))
+        }
     }
 
     /// Adds or removes the bottom padding on the page depending on toolbar visibility.
@@ -265,6 +297,24 @@ final class YouTubeWebViewModel: ObservableObject {
     // MARK: - Auto Tracking
 
     private var cancellables = Set<AnyCancellable>()
+    
+    // MARK: - Session Timer
+    
+    private func startSessionTimer() {
+        sessionStartTime = Date()
+        sessionProgress = 0.0
+        
+        sessionTimer?.invalidate()
+        sessionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.updateSessionProgress()
+        }
+    }
+    
+    private func updateSessionProgress() {
+        guard let startTime = sessionStartTime else { return }
+        let elapsed = Date().timeIntervalSince(startTime)
+        sessionProgress = min(1.0, elapsed / AppConstants.sessionMaxDuration)
+    }
 
     private func startObservingVideoPage() {
         webViewState.$isOnVideoPage
