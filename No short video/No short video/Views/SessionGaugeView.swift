@@ -7,12 +7,9 @@
 
 import SwiftUI
 
-/// Vertical session gauge on the left edge.
-/// Expanded  → glass pill, vertical fill bar, horizontal countdown.
-/// Collapsed → draggable glass circle with progress ring.
-///
-/// The collapsed pill remembers its last dragged position even after
-/// the gauge is expanded then collapsed again.
+/// Vertical session gauge — draggable in both expanded and collapsed states.
+/// Position is shared between states: dragging while expanded keeps that position
+/// when collapsing, and vice‑versa.
 struct SessionGaugeView: View {
 
     @ObservedObject var viewModel: YouTubeWebViewModel
@@ -20,9 +17,11 @@ struct SessionGaugeView: View {
 
     @State private var isExpanded = true
 
-    // Persists across expand/collapse cycles (not reset on expand)
-    @State     private var pillOffset: CGSize  = .zero
-    @GestureState private var pillDrag: CGSize = .zero
+    // Shared drag state — applies to both expanded and collapsed views
+    @State     private var gaugeOffset: CGSize  = .zero
+    @GestureState private var gaugeDrag: CGSize = .zero
+    // Guards tap-to-toggle from firing at the end of a drag
+    @State private var gaugeDragActive: Bool    = false
 
     var body: some View {
         Group {
@@ -32,6 +31,19 @@ struct SessionGaugeView: View {
                 collapsedPill
             }
         }
+        // Single shared offset + drag for both states
+        .offset(x: gaugeOffset.width  + gaugeDrag.width,
+                y: gaugeOffset.height + gaugeDrag.height)
+        .gesture(
+            DragGesture(minimumDistance: 4)
+                .onChanged { _ in gaugeDragActive = true }
+                .updating($gaugeDrag) { v, s, _ in s = v.translation }
+                .onEnded { v in
+                    gaugeOffset.width  += v.translation.width
+                    gaugeOffset.height += v.translation.height
+                    DispatchQueue.main.async { gaugeDragActive = false }
+                }
+        )
         .animation(.spring(response: 0.4, dampingFraction: 0.75), value: isExpanded)
     }
 
@@ -43,7 +55,6 @@ struct SessionGaugeView: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.white.opacity(0.5))
 
-            // Vertical fill bar
             GeometryReader { geo in
                 ZStack(alignment: .bottom) {
                     RoundedRectangle(cornerRadius: 4).fill(.white.opacity(0.12))
@@ -55,7 +66,6 @@ struct SessionGaugeView: View {
             }
             .frame(width: 7, height: 76)
 
-            // Horizontal countdown label (no rotation)
             Text(countdownLabel)
                 .font(.system(size: 9, weight: .bold).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.9))
@@ -69,18 +79,18 @@ struct SessionGaugeView: View {
         .background(glassBackground(Capsule()))
         .transition(.scale(scale: 0.5).combined(with: .opacity))
         .onTapGesture {
+            guard !gaugeDragActive else { return }
             withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { isExpanded = false }
         }
     }
 
-    // MARK: - Collapsed (draggable, position persists)
+    // MARK: - Collapsed
 
     private var collapsedPill: some View {
         ZStack {
             Circle()
                 .fill(.ultraThinMaterial)
                 .overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 0.5))
-
             Circle()
                 .trim(from: 0, to: viewModel.sessionProgress)
                 .stroke(gaugeColor, style: StrokeStyle(lineWidth: 3, lineCap: .round))
@@ -90,21 +100,11 @@ struct SessionGaugeView: View {
         }
         .frame(width: 36, height: 36)
         .shadow(color: gaugeColor.opacity(0.5), radius: 8, x: 2)
-        // Apply accumulated drag offset (survives expand ↔ collapse)
-        .offset(x: pillOffset.width + pillDrag.width,
-                y: pillOffset.height + pillDrag.height)
-        .gesture(
-            DragGesture(minimumDistance: 4)
-                .updating($pillDrag) { value, state, _ in state = value.translation }
-                .onEnded { value in
-                    pillOffset.width  += value.translation.width
-                    pillOffset.height += value.translation.height
-                }
-        )
+        .transition(.scale(scale: 0.5).combined(with: .opacity))
         .onTapGesture {
+            guard !gaugeDragActive else { return }
             withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { isExpanded = true }
         }
-        .transition(.scale(scale: 0.5).combined(with: .opacity))
     }
 
     // MARK: - Helpers
