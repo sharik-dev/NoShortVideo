@@ -35,6 +35,12 @@ struct ToolbarView: View {
             toolbarButton(icon: "bookmark.fill",
                           disabled: false, accent: true) { viewModel.saveCurrentVideo() }
 
+            toolbarButton(
+                icon: "repeat",
+                disabled: !viewModel.webViewState.isOnVideoPage,
+                accent: viewModel.isLoopEnabled
+            ) { viewModel.toggleLoop() }
+
             toolbarButton(icon: "books.vertical",
                           disabled: false) { showLibrary = true }
 

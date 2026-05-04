@@ -7,7 +7,10 @@
 
 import SwiftUI
 
-/// Library screen showing saved videos with thumbnails, timestamps, and progress.
+private let predefinedCategories = [
+    "Watch Later", "Music", "Tech", "Sport", "Education", "Entertainment"
+]
+
 struct LibraryView: View {
 
     @StateObject private var libraryVM = LibraryViewModel()
@@ -17,7 +20,6 @@ struct LibraryView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Dark gradient background
                 LinearGradient(
                     colors: [Color(.systemBackground), Color.black.opacity(0.3)],
                     startPoint: .top,
@@ -28,23 +30,53 @@ struct LibraryView: View {
                 if libraryVM.videos.isEmpty {
                     emptyState
                 } else {
-                    videoList
+                    VStack(spacing: 0) {
+                        if !libraryVM.allCategories.isEmpty {
+                            categoryFilterBar
+                        }
+                        videoList
+                    }
                 }
             }
             .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        isPresented = false
-                    }
-                    .fontWeight(.semibold)
+                    Button("Done") { isPresented = false }
+                        .fontWeight(.semibold)
                 }
             }
         }
-        .onAppear {
-            libraryVM.load()
+        .onAppear { libraryVM.load() }
+    }
+
+    // MARK: - Category Filter
+
+    private var categoryFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                categoryChip(label: "All", value: nil)
+                ForEach(libraryVM.allCategories, id: \.self) { cat in
+                    categoryChip(label: cat, value: cat)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
+    }
+
+    private func categoryChip(label: String, value: String?) -> some View {
+        Button { libraryVM.selectedCategory = value } label: {
+            Text(label)
+                .font(.caption)
+                .fontWeight(.medium)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(libraryVM.selectedCategory == value ? Color.red : Color(.systemGray5))
+                .foregroundStyle(libraryVM.selectedCategory == value ? Color.white : Color.primary)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Empty State
@@ -71,7 +103,7 @@ struct LibraryView: View {
 
     private var videoList: some View {
         List {
-            ForEach(libraryVM.videos) { video in
+            ForEach(libraryVM.filteredVideos) { video in
                 videoRow(video)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -79,27 +111,62 @@ struct LibraryView: View {
                         isPresented = false
                     }
                     .listRowBackground(Color.clear)
-            }
-            .onDelete { offsets in
-                libraryVM.delete(at: offsets)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            libraryVM.delete(video: video)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                    .contextMenu {
+                        categoryMenu(for: video)
+                        Divider()
+                        Button(role: .destructive) {
+                            libraryVM.delete(video: video)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
             }
         }
         .listStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func categoryMenu(for video: SavedVideo) -> some View {
+        Menu {
+            ForEach(predefinedCategories, id: \.self) { cat in
+                Button {
+                    libraryVM.setCategory(cat, for: video)
+                } label: {
+                    if video.category == cat {
+                        Label(cat, systemImage: "checkmark")
+                    } else {
+                        Text(cat)
+                    }
+                }
+            }
+            if !video.category.isEmpty {
+                Divider()
+                Button(role: .destructive) {
+                    libraryVM.setCategory("", for: video)
+                } label: {
+                    Label("Remove Category", systemImage: "tag.slash")
+                }
+            }
+        } label: {
+            Label("Set Category", systemImage: "tag")
+        }
     }
 
     // MARK: - Video Row
 
     private func videoRow(_ video: SavedVideo) -> some View {
         HStack(spacing: 14) {
-            // Thumbnail
             AsyncImage(url: URL(string: video.thumbnailURL)) { phase in
                 switch phase {
                 case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(16 / 9, contentMode: .fill)
-                case .failure:
-                    thumbnailPlaceholder
+                    image.resizable().aspectRatio(16 / 9, contentMode: .fill)
                 default:
                     thumbnailPlaceholder
                 }
@@ -107,31 +174,37 @@ struct LibraryView: View {
             .frame(width: 130, height: 73)
             .clipShape(RoundedRectangle(cornerRadius: 10))
 
-            // Info
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(video.title)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .lineLimit(2)
 
-                // Timestamp
+                if !video.category.isEmpty {
+                    Text(video.category)
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.red.opacity(0.18))
+                        .foregroundStyle(Color.red)
+                        .clipShape(Capsule())
+                }
+
                 HStack(spacing: 4) {
                     Image(systemName: "clock")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-
                     Text("\(video.formattedLastTime) / \(video.formattedDuration)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                // Progress bar
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color(.systemGray5))
                             .frame(height: 3)
-
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color.red)
                             .frame(width: geo.size.width * video.progress, height: 3)
@@ -142,7 +215,6 @@ struct LibraryView: View {
 
             Spacer(minLength: 0)
 
-            // Play icon
             Image(systemName: "play.circle.fill")
                 .font(.title2)
                 .foregroundStyle(.red)
@@ -153,9 +225,6 @@ struct LibraryView: View {
     private var thumbnailPlaceholder: some View {
         RoundedRectangle(cornerRadius: 10)
             .fill(Color(.systemGray5))
-            .overlay(
-                Image(systemName: "play.rectangle")
-                    .foregroundStyle(.secondary)
-            )
+            .overlay(Image(systemName: "play.rectangle").foregroundStyle(.secondary))
     }
 }

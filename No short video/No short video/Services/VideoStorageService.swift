@@ -49,6 +49,16 @@ final class VideoStorageService {
         }
     }
 
+    /// Updates only the category of a saved video.
+    func updateCategory(videoId: String, category: String) {
+        queue.sync {
+            var videos = loadAllUnsafe()
+            guard let index = videos.firstIndex(where: { $0.id == videoId }) else { return }
+            videos[index].category = category
+            writeUnsafe(videos)
+        }
+    }
+
     /// Deletes a video by its ID.
     func delete(videoId: String) {
         queue.sync {

@@ -227,6 +227,12 @@ enum ScriptInjectionService {
         """
     }
 
+    /// Enables or disables native video looping.
+    static func loopScript(enabled: Bool) -> String {
+        let flag = enabled ? "true" : "false"
+        return "var v=document.querySelector('video'); if(v) v.loop=\(flag);"
+    }
+
     /// JavaScript to seek the video to a specific time.
     static func seekScript(to seconds: Double) -> String {
         """

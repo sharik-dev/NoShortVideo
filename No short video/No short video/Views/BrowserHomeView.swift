@@ -94,6 +94,13 @@ struct BrowserHomeView: View {
                     ) { url in viewModel.loadURL(url); isPresented = false }
 
                     FavTile(
+                        name: "YT Music",
+                        icon: "music.note",
+                        color: Color(red: 1, green: 0.18, blue: 0.33),
+                        urlString: "https://music.youtube.com"
+                    ) { url in viewModel.loadURL(url); isPresented = false }
+
+                    FavTile(
                         name: "Twitch",
                         icon: "gamecontroller.fill",
                         color: Color(red: 0.57, green: 0.27, blue: 1),

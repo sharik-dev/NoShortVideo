@@ -7,48 +7,63 @@
 
 import Foundation
 
-/// A video bookmarked by the user, with its playback timestamp.
 struct SavedVideo: Codable, Identifiable {
 
-    /// YouTube video ID (e.g. "dQw4w9WgXcQ").
     let id: String
-
-    /// Video title extracted from the page.
     var title: String
-
-    /// Thumbnail URL built from the video ID.
     var thumbnailURL: String
-
-    /// Full YouTube watch URL.
     var url: String
-
-    /// Playback position in seconds where the user stopped.
     var lastTime: Double
-
-    /// Total video duration in seconds.
     var duration: Double
-
-    /// Date the video was first saved.
     var dateAdded: Date
+    var category: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, thumbnailURL, url, lastTime, duration, dateAdded, category
+    }
+
+    // Custom decoder so existing JSON without "category" still loads.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id           = try c.decode(String.self, forKey: .id)
+        title        = try c.decode(String.self, forKey: .title)
+        thumbnailURL = try c.decode(String.self, forKey: .thumbnailURL)
+        url          = try c.decode(String.self, forKey: .url)
+        lastTime     = try c.decode(Double.self, forKey: .lastTime)
+        duration     = try c.decode(Double.self, forKey: .duration)
+        dateAdded    = try c.decode(Date.self,   forKey: .dateAdded)
+        category     = try c.decodeIfPresent(String.self, forKey: .category) ?? ""
+    }
+
+    init(
+        id: String,
+        title: String,
+        thumbnailURL: String,
+        url: String,
+        lastTime: Double,
+        duration: Double,
+        dateAdded: Date,
+        category: String = ""
+    ) {
+        self.id           = id
+        self.title        = title
+        self.thumbnailURL = thumbnailURL
+        self.url          = url
+        self.lastTime     = lastTime
+        self.duration     = duration
+        self.dateAdded    = dateAdded
+        self.category     = category
+    }
 
     // MARK: - Convenience
 
-    /// Builds the standard HQ thumbnail URL for a YouTube video.
     static func thumbnailURL(for videoId: String) -> String {
         "https://img.youtube.com/vi/\(videoId)/hqdefault.jpg"
     }
 
-    /// Formatted timestamp string, e.g. "5:12".
-    var formattedLastTime: String {
-        Self.formatTime(lastTime)
-    }
+    var formattedLastTime: String { Self.formatTime(lastTime) }
+    var formattedDuration: String { Self.formatTime(duration) }
 
-    /// Formatted duration string, e.g. "10:30".
-    var formattedDuration: String {
-        Self.formatTime(duration)
-    }
-
-    /// Watch progress as a fraction 0…1.
     var progress: Double {
         guard duration > 0 else { return 0 }
         return min(lastTime / duration, 1.0)
@@ -59,9 +74,7 @@ struct SavedVideo: Codable, Identifiable {
         let h = totalSeconds / 3600
         let m = (totalSeconds % 3600) / 60
         let s = totalSeconds % 60
-        if h > 0 {
-            return String(format: "%d:%02d:%02d", h, m, s)
-        }
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%d:%02d", m, s)
     }
 }

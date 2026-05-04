@@ -5,6 +5,7 @@
 //  Created by Sharik Mohamed on 05/03/2026.
 //
 
+import AVFoundation
 import Combine
 import WebKit
 
@@ -18,6 +19,7 @@ final class YouTubeWebViewModel: ObservableObject {
     @Published var showSaveError: Bool = false
     @Published var saveErrorMessage: String = ""
     @Published var sessionProgress: Double = 0.0 // 0.0 to 1.0
+    @Published var isLoopEnabled: Bool = false
 
     // MARK: - Properties
 
@@ -110,6 +112,26 @@ final class YouTubeWebViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            self?.webView.evaluateJavaScript(
+                "var v=document.querySelector('video'); if(v&&v.paused) v.play();",
+                completionHandler: nil
+            )
+        }
+
+        // When an audio session interruption ends (e.g. phone call finished),
+        // re-activate the session and resume playback automatically.
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard
+                let info = notification.userInfo,
+                let typeVal = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+                let type = AVAudioSession.InterruptionType(rawValue: typeVal),
+                type == .ended
+            else { return }
+            try? AVAudioSession.sharedInstance().setActive(true)
             self?.webView.evaluateJavaScript(
                 "var v=document.querySelector('video'); if(v&&v.paused) v.play();",
                 completionHandler: nil
@@ -305,13 +327,30 @@ final class YouTubeWebViewModel: ObservableObject {
         guard let seekTime = pendingSeekTime, seekTime > 0 else { return }
         pendingSeekTime = nil
 
-        // Wait for the video player to initialise
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.webView.evaluateJavaScript(
+            guard let self else { return }
+            self.webView.evaluateJavaScript(
                 ScriptInjectionService.seekScript(to: seekTime),
                 completionHandler: nil
             )
+            // Restore loop state on the new video
+            if self.isLoopEnabled {
+                self.webView.evaluateJavaScript(
+                    ScriptInjectionService.loopScript(enabled: true),
+                    completionHandler: nil
+                )
+            }
         }
+    }
+
+    // MARK: - Loop
+
+    func toggleLoop() {
+        isLoopEnabled.toggle()
+        webView.evaluateJavaScript(
+            ScriptInjectionService.loopScript(enabled: isLoopEnabled),
+            completionHandler: nil
+        )
     }
 
     // MARK: - Auto Tracking
