@@ -115,6 +115,110 @@ enum ScriptInjectionService {
         """
     }
 
+    // MARK: - Hide Recommendations
+
+    static var hideRecommendationsScript: String {
+        """
+        (function() {
+            if (window._nsv_hideRecs_observer) window._nsv_hideRecs_observer.disconnect();
+            function hideRecs() {
+                var path = window.location.pathname;
+                // Home feed
+                if (path === '/' || path.startsWith('/feed')) {
+                    document.querySelectorAll('ytm-rich-grid-renderer, ytm-rich-item-renderer').forEach(function(e) {
+                        e.style.setProperty('display','none','important');
+                    });
+                }
+                // Related videos on any page
+                document.querySelectorAll('ytm-compact-video-renderer, ytd-compact-video-renderer').forEach(function(e) {
+                    e.style.setProperty('display','none','important');
+                });
+                // Video cards (home + search results)
+                document.querySelectorAll('ytm-video-with-context-renderer').forEach(function(e) {
+                    e.style.setProperty('display','none','important');
+                });
+                // Item sections — hide only non-comment ones
+                document.querySelectorAll('ytm-item-section-renderer').forEach(function(e) {
+                    if (!e.querySelector('ytm-comment-thread-renderer, ytm-comments-entry-point-header-renderer')) {
+                        e.style.setProperty('display','none','important');
+                    }
+                });
+            }
+            hideRecs();
+            window._nsv_hideRecs_observer = new MutationObserver(hideRecs);
+            window._nsv_hideRecs_observer.observe(document.body, { childList: true, subtree: true });
+        })();
+        """
+    }
+
+    static var showRecommendationsScript: String {
+        """
+        (function() {
+            if (window._nsv_hideRecs_observer) {
+                window._nsv_hideRecs_observer.disconnect();
+                window._nsv_hideRecs_observer = null;
+            }
+            ['ytm-rich-grid-renderer','ytm-rich-item-renderer','ytm-compact-video-renderer',
+             'ytd-compact-video-renderer','ytm-video-with-context-renderer','ytm-item-section-renderer'
+            ].forEach(function(sel) {
+                document.querySelectorAll(sel).forEach(function(e) { e.style.removeProperty('display'); });
+            });
+        })();
+        """
+    }
+
+    // MARK: - Blur Thumbnails
+
+    static var blurThumbnailsScript: String {
+        """
+        (function() {
+            if (document.getElementById('_nsv_blur_style')) return;
+            var s = document.createElement('style');
+            s.id = '_nsv_blur_style';
+            s.textContent = [
+                'ytm-thumbnail-renderer img,',
+                'ytm-rich-item-renderer img,',
+                'ytm-compact-video-renderer img,',
+                'ytm-video-with-context-renderer img,',
+                'ytd-rich-item-renderer img,',
+                'ytd-compact-video-renderer img,',
+                'ytd-video-renderer img {',
+                '  filter: blur(10px) !important;',
+                '  -webkit-filter: blur(10px) !important;',
+                '  transition: filter 0.25s;',
+                '}'
+            ].join('');
+            (document.head || document.documentElement).appendChild(s);
+        })();
+        """
+    }
+
+    static var removeBlurThumbnailsScript: String {
+        """
+        (function() { var s = document.getElementById('_nsv_blur_style'); if (s) s.remove(); })();
+        """
+    }
+
+    // MARK: - Grayscale
+
+    static var grayscaleScript: String {
+        """
+        (function() {
+            if (document.getElementById('_nsv_gray_style')) return;
+            var s = document.createElement('style');
+            s.id = '_nsv_gray_style';
+            s.textContent = 'html { filter: grayscale(100%) !important; -webkit-filter: grayscale(100%) !important; }';
+            (document.head || document.documentElement).appendChild(s);
+        })();
+        """
+    }
+
+    static var removeGrayscaleScript: String {
+        """
+        (function() { var s = document.getElementById('_nsv_gray_style'); if (s) s.remove(); })();
+        """
+    }
+
     /// JavaScript that extracts video metadata using MULTIPLE strategies simultaneously.
     /// At least one should succeed on mobile YouTube SPA.
     static var videoInfoScript: String {

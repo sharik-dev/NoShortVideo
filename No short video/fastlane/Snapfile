@@ -1,0 +1,13 @@
+devices([
+  "iPhone 17 Pro Max",
+  "iPhone 17",
+])
+
+languages(["en-US"])
+
+scheme("No short videoUITests")
+
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+launch_arguments(["-UITestMode YES"])
+concurrent_simulators(false)

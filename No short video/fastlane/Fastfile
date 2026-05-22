@@ -1,0 +1,13 @@
+default_platform(:ios)
+
+platform :ios do
+  lane :screenshots do
+    capture_screenshots(
+      project: "No short video.xcodeproj",
+      scheme: "No short videoUITests",
+      output_directory: "./fastlane/screenshots",
+      clear_previous_screenshots: true,
+      launch_arguments: ["-UITestMode YES"],
+    )
+  end
+end

@@ -9,9 +9,13 @@ import SwiftUI
 
 struct SettingsView: View {
 
-    @AppStorage("dailyLimitMinutes") private var dailyLimitMinutes: Int = 60
-    @AppStorage("gaugeEnabled")      private var gaugeEnabled: Bool     = true
-    @AppStorage("appLanguage")       private var lang: String           = "en"
+    @AppStorage("dailyLimitMinutes")    private var dailyLimitMinutes: Int  = 60
+    @AppStorage("gaugeEnabled")         private var gaugeEnabled: Bool      = true
+    @AppStorage("blockOnLimit")         private var blockOnLimit: Bool      = false
+    @AppStorage("hideRecommendations")  private var hideRecommendations: Bool = false
+    @AppStorage("blurThumbnails")       private var blurThumbnails: Bool    = false
+    @AppStorage("grayscaleMode")        private var grayscaleMode: Bool     = false
+    @AppStorage("appLanguage")          private var lang: String            = "en"
 
     @Environment(\.dismiss) private var dismiss
 
@@ -28,6 +32,29 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 } header: {
                     Text(t("Langue", "Language"))
+                }
+
+                // ── Concentration ──
+                Section {
+                    Toggle(isOn: $hideRecommendations) {
+                        Label(t("Cacher les recommandations", "Hide recommendations"),
+                              systemImage: "rectangle.slash")
+                    }
+                    Toggle(isOn: $blurThumbnails) {
+                        Label(t("Flouter les miniatures", "Blur thumbnails"),
+                              systemImage: "circle.dotted")
+                    }
+                    Toggle(isOn: $grayscaleMode) {
+                        Label(t("Mode noir et blanc", "Grayscale mode"),
+                              systemImage: "circle.lefthalf.filled")
+                    }
+                } header: {
+                    Text(t("Concentration", "Focus"))
+                } footer: {
+                    Text(t(
+                        "Réduit les éléments conçus pour capter l'attention et limiter la dopamine.",
+                        "Reduces attention-capturing elements to limit dopamine triggers."
+                    ))
                 }
 
                 // ── Gauge ──
@@ -54,6 +81,17 @@ struct SettingsView: View {
                     Text(t(
                         "La jauge se remplit selon cette durée (défaut : 60 min).",
                         "The gauge fills over this duration (default: 60 min)."
+                    ))
+                }
+                .disabled(!gaugeEnabled)
+
+                // ── Block on limit ──
+                Section {
+                    Toggle(t("Bloquer à la limite", "Block when limit is reached"), isOn: $blockOnLimit)
+                } footer: {
+                    Text(t(
+                        "YouTube sera verrouillé quand la limite de session est atteinte.",
+                        "YouTube will be locked when the session limit is reached."
                     ))
                 }
                 .disabled(!gaugeEnabled)

@@ -20,6 +20,7 @@ final class YouTubeWebViewModel: ObservableObject {
     @Published var saveErrorMessage: String = ""
     @Published var sessionProgress: Double = 0.0 // 0.0 to 1.0
     @Published var isLoopEnabled: Bool = false
+    @Published var isBlocked: Bool = false
 
     // MARK: - Properties
 
@@ -76,10 +77,14 @@ final class YouTubeWebViewModel: ObservableObject {
         // Hook seek-on-load for video resume
         self.navigationDelegate.onDidFinish = { [weak self] in
             self?.performPendingSeek()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self?.applyDynamicScripts()
+                self?.checkBlockingState()
+            }
         }
 
         // KVO: observe URL changes for SPA navigations (YouTube mobile)
-        self.urlObservation = webView.observe(\.url, options: [.new]) { [weak state] webView, _ in
+        self.urlObservation = webView.observe(\.url, options: [.new]) { [weak self, weak state] webView, _ in
             DispatchQueue.main.async {
                 state?.currentURL = webView.url
                 state?.canGoBack = webView.canGoBack
@@ -96,6 +101,12 @@ final class YouTubeWebViewModel: ObservableObject {
                     state?.isOnVideoPage = false
                     state?.currentVideoId = ""
                 }
+
+                // Re-apply dynamic scripts after SPA navigation
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    self?.applyDynamicScripts()
+                    self?.checkBlockingState()
+                }
             }
         }
 
@@ -104,6 +115,9 @@ final class YouTubeWebViewModel: ObservableObject {
 
         // Start session timer
         startSessionTimer()
+
+        // Observe UserDefaults to re-apply dynamic scripts when settings change
+        observeSettings()
 
         // When the app is backgrounded, YouTube may still pause via its own
         // player logic. Force a play() call to counteract it.
@@ -378,6 +392,48 @@ final class YouTubeWebViewModel: ObservableObject {
         guard let startTime = sessionStartTime else { return }
         let elapsed = Date().timeIntervalSince(startTime)
         sessionProgress = min(1.0, elapsed / currentDailyLimitSeconds)
+        checkBlockingState()
+    }
+
+    // MARK: - Dynamic Settings Scripts
+
+    private func observeSettings() {
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyDynamicScripts()
+            self?.checkBlockingState()
+        }
+    }
+
+    func applyDynamicScripts() {
+        let hideRecs   = UserDefaults.standard.bool(forKey: "hideRecommendations")
+        let blurThumbs = UserDefaults.standard.bool(forKey: "blurThumbnails")
+        let grayscale  = UserDefaults.standard.bool(forKey: "grayscaleMode")
+
+        let recsScript = hideRecs
+            ? ScriptInjectionService.hideRecommendationsScript
+            : ScriptInjectionService.showRecommendationsScript
+        let blurScript = blurThumbs
+            ? ScriptInjectionService.blurThumbnailsScript
+            : ScriptInjectionService.removeBlurThumbnailsScript
+        let grayScript = grayscale
+            ? ScriptInjectionService.grayscaleScript
+            : ScriptInjectionService.removeGrayscaleScript
+
+        webView.evaluateJavaScript(recsScript, completionHandler: nil)
+        webView.evaluateJavaScript(blurScript, completionHandler: nil)
+        webView.evaluateJavaScript(grayScript, completionHandler: nil)
+    }
+
+    func checkBlockingState() {
+        let blockOnLimit = UserDefaults.standard.bool(forKey: "blockOnLimit")
+        let shouldBlock  = blockOnLimit && sessionProgress >= 1.0
+        if isBlocked != shouldBlock {
+            isBlocked = shouldBlock
+        }
     }
 
     private func startObservingVideoPage() {

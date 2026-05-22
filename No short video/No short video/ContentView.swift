@@ -57,6 +57,12 @@ struct ContentView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .animation(.spring(response: 0.4), value: viewModel.showSavedFeedback)
             }
+
+            if viewModel.isBlocked {
+                blockedOverlay
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.3), value: viewModel.isBlocked)
+            }
         }
         .onAppear { viewModel.loadYouTube() }
         .fullScreenCover(isPresented: $showHome) {
@@ -191,6 +197,46 @@ struct ContentView: View {
             .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
             .padding(.top, 60)
             Spacer()
+        }
+    }
+
+    // MARK: - Blocked Overlay
+
+    private var blockedOverlay: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                Image(systemName: "timer")
+                    .font(.system(size: 60, weight: .thin))
+                    .foregroundStyle(.primary)
+
+                VStack(spacing: 8) {
+                    Text(t("Limite atteinte", "Limit reached"))
+                        .font(.title2.bold())
+                    Text(t(
+                        "Tu as utilisé ton temps YouTube pour cette session.\nAugmente la limite dans les paramètres pour continuer.",
+                        "You've used your YouTube time for this session.\nIncrease the limit in settings to continue."
+                    ))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                }
+
+                Button {
+                    showSettings = true
+                } label: {
+                    Label(t("Paramètres", "Settings"), systemImage: "gearshape")
+                        .font(.body.weight(.semibold))
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 12)
+                        .background(.thinMaterial, in: Capsule())
+                }
+                .padding(.top, 4)
+            }
         }
     }
 
