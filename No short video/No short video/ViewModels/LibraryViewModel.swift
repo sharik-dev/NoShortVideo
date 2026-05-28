@@ -11,19 +11,20 @@ import SwiftUI
 final class LibraryViewModel: ObservableObject {
 
     @Published var videos: [SavedVideo] = []
-    @Published var selectedCategory: String? = nil
+    @Published var selectedFolder: String? = nil
 
     private let storage = VideoStorageService.shared
 
     // MARK: - Derived
 
-    var allCategories: [String] {
-        Array(Set(videos.compactMap { $0.category.isEmpty ? nil : $0.category })).sorted()
+    /// Folder names present across all saved videos (sorted, deduped).
+    var allFolders: [String] {
+        Array(Set(videos.compactMap { $0.folder.isEmpty ? nil : $0.folder })).sorted()
     }
 
     var filteredVideos: [SavedVideo] {
-        guard let cat = selectedCategory else { return videos }
-        return videos.filter { $0.category == cat }
+        guard let f = selectedFolder else { return videos }
+        return videos.filter { $0.folder == f }
     }
 
     // MARK: - Actions
@@ -43,10 +44,10 @@ final class LibraryViewModel: ObservableObject {
         videos.removeAll { idsToDelete.contains($0.id) }
     }
 
-    func setCategory(_ category: String, for video: SavedVideo) {
-        storage.updateCategory(videoId: video.id, category: category)
+    func setFolder(_ folder: String, for video: SavedVideo) {
+        storage.updateFolder(videoId: video.id, folder: folder)
         if let index = videos.firstIndex(where: { $0.id == video.id }) {
-            videos[index].category = category
+            videos[index].folder = folder
         }
     }
 }

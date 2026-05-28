@@ -21,12 +21,15 @@ final class YouTubeWebViewModel: ObservableObject {
     @Published var sessionProgress: Double = 0.0 // 0.0 to 1.0
     @Published var isLoopEnabled: Bool = false
     @Published var isBlocked: Bool = false
+    @Published var stepModeSteps: Int = 0
+    @Published var stepsNeededToUnlock: Int = 0
 
     // MARK: - Properties
 
     let webView: WKWebView
     private let navigationDelegate: WebViewNavigationDelegate
     private let storage = VideoStorageService.shared
+    private let stepService = StepCounterService.shared
     private var trackingTimer: Timer?
     private var pendingSeekTime: Double?
     private var urlObservation: NSKeyValueObservation?
@@ -118,6 +121,27 @@ final class YouTubeWebViewModel: ObservableObject {
 
         // Observe UserDefaults to re-apply dynamic scripts when settings change
         observeSettings()
+
+        // Step mode: recalculer la jauge et l'état de blocage à chaque nouveau pas
+        stepService.$totalAvailableSteps
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] steps in
+                self?.stepModeSteps = steps
+                self?.checkBlockingState()
+            }
+            .store(in: &cancellables)
+
+        if UserDefaults.standard.bool(forKey: "stepModeEnabled") {
+            stepService.start()
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.stepService.handleDayRolloverIfNeeded()
+        }
 
         // When the app is backgrounded, YouTube may still pause via its own
         // player logic. Force a play() call to counteract it.
@@ -384,8 +408,15 @@ final class YouTubeWebViewModel: ObservableObject {
     }
     
     private var currentDailyLimitSeconds: Double {
-        let minutes = UserDefaults.standard.integer(forKey: "dailyLimitMinutes")
-        return Double(minutes > 0 ? minutes : 60) * 60
+        if UserDefaults.standard.bool(forKey: "stepModeEnabled") {
+            let raw = UserDefaults.standard.integer(forKey: "stepsPerMinute")
+            let spm = raw > 0 ? raw : 100
+            let minutes = Double(stepService.totalAvailableSteps) / Double(spm)
+            return max(5.0, minutes) * 60.0
+        } else {
+            let minutes = UserDefaults.standard.integer(forKey: "dailyLimitMinutes")
+            return Double(minutes > 0 ? minutes : 60) * 60
+        }
     }
 
     private func updateSessionProgress() {
@@ -405,6 +436,12 @@ final class YouTubeWebViewModel: ObservableObject {
         ) { [weak self] _ in
             self?.applyDynamicScripts()
             self?.checkBlockingState()
+            let stepModeEnabled = UserDefaults.standard.bool(forKey: "stepModeEnabled")
+            if stepModeEnabled {
+                self?.stepService.start()
+            } else {
+                self?.stepService.stop()
+            }
         }
     }
 
@@ -431,6 +468,10 @@ final class YouTubeWebViewModel: ObservableObject {
     func checkBlockingState() {
         let blockOnLimit = UserDefaults.standard.bool(forKey: "blockOnLimit")
         let shouldBlock  = blockOnLimit && sessionProgress >= 1.0
+        if shouldBlock {
+            let raw = UserDefaults.standard.integer(forKey: "stepsPerMinute")
+            stepsNeededToUnlock = raw > 0 ? raw : 100
+        }
         if isBlocked != shouldBlock {
             isBlocked = shouldBlock
         }

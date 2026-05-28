@@ -7,15 +7,19 @@
 
 import SwiftUI
 
-private let predefinedCategories = [
-    "Watch Later", "Music", "Tech", "Sport", "Education", "Entertainment"
-]
-
 struct LibraryView: View {
 
     @StateObject private var libraryVM = LibraryViewModel()
     @ObservedObject var youtubeVM: YouTubeWebViewModel
     @Binding var isPresented: Bool
+
+    @AppStorage("appLanguage") private var lang: String = "en"
+
+    @State private var showNewFolderAlert: Bool = false
+    @State private var newFolderName: String = ""
+    @State private var folderTargetVideoId: String? = nil
+
+    private func t(_ fr: String, _ en: String) -> String { lang == "fr" ? fr : en }
 
     var body: some View {
         NavigationView {
@@ -27,13 +31,13 @@ struct LibraryView: View {
                 )
                 .ignoresSafeArea()
 
-                if libraryVM.videos.isEmpty {
-                    emptyState
-                } else {
-                    VStack(spacing: 0) {
-                        if !libraryVM.allCategories.isEmpty {
-                            categoryFilterBar
-                        }
+                VStack(spacing: 0) {
+                    if !libraryVM.allFolders.isEmpty {
+                        folderFilterBar
+                    }
+                    if libraryVM.videos.isEmpty {
+                        emptyState
+                    } else {
                         videoList
                     }
                 }
@@ -46,18 +50,25 @@ struct LibraryView: View {
                         .fontWeight(.semibold)
                 }
             }
+            .alert(t("Nouveau dossier", "New Folder"), isPresented: $showNewFolderAlert) {
+                TextField(t("Nom du dossier", "Folder name"), text: $newFolderName)
+                Button(t("Créer", "Create")) { commitNewFolder() }
+                Button(t("Annuler", "Cancel"), role: .cancel) { newFolderName = "" }
+            } message: {
+                Text(t("Donnez un nom à votre dossier.", "Give your folder a name."))
+            }
         }
         .onAppear { libraryVM.load() }
     }
 
-    // MARK: - Category Filter
+    // MARK: - Folder Filter
 
-    private var categoryFilterBar: some View {
+    private var folderFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                categoryChip(label: "All", value: nil)
-                ForEach(libraryVM.allCategories, id: \.self) { cat in
-                    categoryChip(label: cat, value: cat)
+                folderChip(label: t("Tous", "All"), value: nil, system: "tray.full")
+                ForEach(libraryVM.allFolders, id: \.self) { f in
+                    folderChip(label: f, value: f, system: "folder.fill")
                 }
             }
             .padding(.horizontal, 16)
@@ -65,16 +76,17 @@ struct LibraryView: View {
         }
     }
 
-    private func categoryChip(label: String, value: String?) -> some View {
-        Button { libraryVM.selectedCategory = value } label: {
-            Text(label)
-                .font(.caption)
-                .fontWeight(.medium)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(libraryVM.selectedCategory == value ? Color.red : Color(.systemGray5))
-                .foregroundStyle(libraryVM.selectedCategory == value ? Color.white : Color.primary)
-                .clipShape(Capsule())
+    private func folderChip(label: String, value: String?, system: String) -> some View {
+        Button { libraryVM.selectedFolder = value } label: {
+            HStack(spacing: 5) {
+                Image(systemName: system).font(.caption2)
+                Text(label).font(.caption).fontWeight(.medium)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(libraryVM.selectedFolder == value ? Color.red : Color(.systemGray5))
+            .foregroundStyle(libraryVM.selectedFolder == value ? Color.white : Color.primary)
+            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -87,16 +99,18 @@ struct LibraryView: View {
                 .font(.system(size: 60))
                 .foregroundStyle(.secondary)
 
-            Text("No Saved Videos")
+            Text(t("Aucun favori", "No Saved Videos"))
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Tap the bookmark icon while watching\na video to save it here.")
+            Text(t("Appuyez sur le marque-page pendant\nla lecture pour enregistrer.",
+                   "Tap the bookmark icon while watching\na video to save it here."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .padding()
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Video List
@@ -119,7 +133,7 @@ struct LibraryView: View {
                         }
                     }
                     .contextMenu {
-                        categoryMenu(for: video)
+                        folderMenu(for: video)
                         Divider()
                         Button(role: .destructive) {
                             libraryVM.delete(video: video)
@@ -133,30 +147,51 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
-    private func categoryMenu(for video: SavedVideo) -> some View {
+    private func folderMenu(for video: SavedVideo) -> some View {
         Menu {
-            ForEach(predefinedCategories, id: \.self) { cat in
-                Button {
-                    libraryVM.setCategory(cat, for: video)
-                } label: {
-                    if video.category == cat {
-                        Label(cat, systemImage: "checkmark")
-                    } else {
-                        Text(cat)
+            Button {
+                folderTargetVideoId = video.id
+                newFolderName = ""
+                showNewFolderAlert = true
+            } label: {
+                Label(t("Nouveau dossier…", "New folder…"), systemImage: "folder.badge.plus")
+            }
+
+            if !libraryVM.allFolders.isEmpty {
+                Divider()
+                ForEach(libraryVM.allFolders, id: \.self) { f in
+                    Button {
+                        libraryVM.setFolder(f, for: video)
+                    } label: {
+                        if video.folder == f {
+                            Label(f, systemImage: "checkmark")
+                        } else {
+                            Label(f, systemImage: "folder")
+                        }
                     }
                 }
             }
-            if !video.category.isEmpty {
+
+            if !video.folder.isEmpty {
                 Divider()
                 Button(role: .destructive) {
-                    libraryVM.setCategory("", for: video)
+                    libraryVM.setFolder("", for: video)
                 } label: {
-                    Label("Remove Category", systemImage: "tag.slash")
+                    Label(t("Retirer du dossier", "Remove from folder"), systemImage: "folder.badge.minus")
                 }
             }
         } label: {
-            Label("Set Category", systemImage: "tag")
+            Label(t("Dossier", "Folder"), systemImage: "folder")
         }
+    }
+
+    private func commitNewFolder() {
+        let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer { newFolderName = ""; folderTargetVideoId = nil }
+        guard !trimmed.isEmpty, let id = folderTargetVideoId else { return }
+        guard let video = libraryVM.videos.first(where: { $0.id == id }) else { return }
+        libraryVM.setFolder(trimmed, for: video)
+        libraryVM.selectedFolder = trimmed
     }
 
     // MARK: - Video Row
@@ -180,15 +215,17 @@ struct LibraryView: View {
                     .fontWeight(.medium)
                     .lineLimit(2)
 
-                if !video.category.isEmpty {
-                    Text(video.category)
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.red.opacity(0.18))
-                        .foregroundStyle(Color.red)
-                        .clipShape(Capsule())
+                HStack(spacing: 6) {
+                    if !video.folder.isEmpty {
+                        Label(video.folder, systemImage: "folder.fill")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.red.opacity(0.18))
+                            .foregroundStyle(Color.red)
+                            .clipShape(Capsule())
+                    }
                 }
 
                 HStack(spacing: 4) {

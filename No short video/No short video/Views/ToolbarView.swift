@@ -28,27 +28,35 @@ struct ToolbarView: View {
         layout {
             toolbarButton(icon: "chevron.left",
                           disabled: !viewModel.webViewState.canGoBack) { viewModel.goBack() }
+                .coachMark(.back)
 
             toolbarButton(icon: "chevron.right",
                           disabled: !viewModel.webViewState.canGoForward) { viewModel.goForward() }
+                .coachMark(.forward)
 
             toolbarButton(icon: "bookmark.fill",
                           disabled: false, accent: true) { viewModel.saveCurrentVideo() }
+                .coachMark(.bookmark)
 
             toolbarButton(icon: "books.vertical",
                           disabled: false) { showLibrary = true }
+                .coachMark(.library)
 
             toolbarButton(icon: "arrow.clockwise",
                           disabled: false) { viewModel.reload() }
+                .coachMark(.reload)
 
             toolbarButton(icon: "house",
                           disabled: false) { onHome() }
+                .coachMark(.home)
 
             toolbarButton(icon: "gearshape",
                           disabled: false) { onSettings() }
+                .coachMark(.settings)
 
             toolbarButton(icon: isCompact ? "chevron.down" : "chevron.right",
                           disabled: false) { onCollapse() }
+                .coachMark(.collapse)
         }
         .padding(isCompact ? .vertical : .horizontal, 10)
         .background(glassBackground)

@@ -13,10 +13,16 @@ struct ContentView: View {
     @State private var showLibrary       = false
     @State private var showToolbar       = true
     @State private var showSettings      = false
-    @State private var showHome          = true
+    @State private var showHome          = false  // set by onAppear based on onboarding state
 
-    @AppStorage("gaugeEnabled") private var gaugeEnabled: Bool = true
-    @AppStorage("appLanguage")  private var lang: String       = "en"
+    @AppStorage("gaugeEnabled")          private var gaugeEnabled: Bool    = true
+    @AppStorage("appLanguage")           private var lang: String          = "en"
+    @AppStorage("stepModeEnabled")       private var stepModeEnabled: Bool = false
+    @AppStorage("hasSeenOnboarding")     private var hasSeenOnboarding: Bool = false
+    @AppStorage("hasSeenQuickstart")     private var hasSeenQuickstart: Bool = false
+
+    @State private var showOnboarding    = false
+    @State private var showQuickstart    = false
 
     // Draggable collapsed toolbar bubble
     @State     private var bubbleOffset: CGSize  = .zero
@@ -59,12 +65,48 @@ struct ContentView: View {
             }
 
             if viewModel.isBlocked {
-                blockedOverlay
-                    .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.3), value: viewModel.isBlocked)
+                if stepModeEnabled {
+                    StepBlockOverlayView(viewModel: viewModel, showSettings: $showSettings)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.3), value: viewModel.isBlocked)
+                } else {
+                    blockedOverlay
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.3), value: viewModel.isBlocked)
+                }
             }
         }
-        .onAppear { viewModel.loadYouTube() }
+        .overlayPreferenceValue(CoachMarkBoundsKey.self) { anchors in
+            if showQuickstart {
+                QuickstartOverlay(isPresented: $showQuickstart, anchors: anchors)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.3), value: showQuickstart)
+            }
+        }
+        .onAppear {
+            viewModel.loadYouTube()
+            if !hasSeenOnboarding {
+                showOnboarding = true
+            } else {
+                showHome = true
+                if !hasSeenQuickstart {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                        showQuickstart = true
+                    }
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showOnboarding) {
+            OnboardingView {
+                hasSeenOnboarding = true
+                showOnboarding = false
+                if !hasSeenQuickstart {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        showQuickstart = true
+                    }
+                }
+            }
+        }
         .fullScreenCover(isPresented: $showHome) {
             BrowserHomeView(viewModel: viewModel, isPresented: $showHome)
         }

@@ -16,13 +16,16 @@ struct SavedVideo: Codable, Identifiable {
     var lastTime: Double
     var duration: Double
     var dateAdded: Date
-    var category: String
+    /// User-defined folder name. Empty string = no folder.
+    var folder: String
 
     enum CodingKeys: String, CodingKey {
-        case id, title, thumbnailURL, url, lastTime, duration, dateAdded, category
+        case id, title, thumbnailURL, url, lastTime, duration, dateAdded
+        case folder
+        case category // legacy
     }
 
-    // Custom decoder so existing JSON without "category" still loads.
+    // Backward-compatible decoder: old JSON used `category`; treat it as `folder`.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id           = try c.decode(String.self, forKey: .id)
@@ -32,7 +35,24 @@ struct SavedVideo: Codable, Identifiable {
         lastTime     = try c.decode(Double.self, forKey: .lastTime)
         duration     = try c.decode(Double.self, forKey: .duration)
         dateAdded    = try c.decode(Date.self,   forKey: .dateAdded)
-        category     = try c.decodeIfPresent(String.self, forKey: .category) ?? ""
+
+        if let f = try c.decodeIfPresent(String.self, forKey: .folder) {
+            folder = f
+        } else {
+            folder = try c.decodeIfPresent(String.self, forKey: .category) ?? ""
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(thumbnailURL, forKey: .thumbnailURL)
+        try c.encode(url, forKey: .url)
+        try c.encode(lastTime, forKey: .lastTime)
+        try c.encode(duration, forKey: .duration)
+        try c.encode(dateAdded, forKey: .dateAdded)
+        try c.encode(folder, forKey: .folder)
     }
 
     init(
@@ -43,7 +63,7 @@ struct SavedVideo: Codable, Identifiable {
         lastTime: Double,
         duration: Double,
         dateAdded: Date,
-        category: String = ""
+        folder: String = ""
     ) {
         self.id           = id
         self.title        = title
@@ -52,7 +72,7 @@ struct SavedVideo: Codable, Identifiable {
         self.lastTime     = lastTime
         self.duration     = duration
         self.dateAdded    = dateAdded
-        self.category     = category
+        self.folder       = folder
     }
 
     // MARK: - Convenience

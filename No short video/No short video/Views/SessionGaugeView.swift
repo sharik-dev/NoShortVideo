@@ -13,7 +13,9 @@ import SwiftUI
 struct SessionGaugeView: View {
 
     @ObservedObject var viewModel: YouTubeWebViewModel
-    @AppStorage("dailyLimitMinutes") private var dailyLimitMinutes: Int = 60
+    @AppStorage("dailyLimitMinutes")  private var dailyLimitMinutes: Int  = 60
+    @AppStorage("stepModeEnabled")    private var stepModeEnabled: Bool    = false
+    @AppStorage("stepsPerMinute")     private var stepsPerMinute: Int      = 100
 
     @State private var isExpanded = true
 
@@ -69,9 +71,10 @@ struct SessionGaugeView: View {
             Text(countdownLabel)
                 .font(.system(size: 9, weight: .bold).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.9))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .frame(width: 28)
+                .lineLimit(stepModeEnabled ? 2 : 1)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.5)
+                .frame(width: stepModeEnabled ? 36 : 28)
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 9)
@@ -123,9 +126,16 @@ struct SessionGaugeView: View {
     }
 
     private var countdownLabel: String {
-        let limitSec = Double(dailyLimitMinutes) * 60
-        let rem = max(0, limitSec - viewModel.sessionProgress * limitSec)
-        return "\(Int(rem / 60))m"
+        let limitSec: Double
+        if stepModeEnabled {
+            let spm = stepsPerMinute > 0 ? stepsPerMinute : 100
+            limitSec = max(5.0, Double(viewModel.stepModeSteps) / Double(spm)) * 60
+        } else {
+            limitSec = Double(dailyLimitMinutes) * 60
+        }
+        let rem = max(0, limitSec * (1.0 - viewModel.sessionProgress))
+        let remMin = Int(rem / 60)
+        return stepModeEnabled ? "\(remMin)m\n\(viewModel.stepModeSteps)p" : "\(remMin)m"
     }
 
     @ViewBuilder

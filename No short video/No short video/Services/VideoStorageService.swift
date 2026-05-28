@@ -49,12 +49,12 @@ final class VideoStorageService {
         }
     }
 
-    /// Updates only the category of a saved video.
-    func updateCategory(videoId: String, category: String) {
+    /// Updates the folder of a saved video.
+    func updateFolder(videoId: String, folder: String) {
         queue.sync {
             var videos = loadAllUnsafe()
             guard let index = videos.firstIndex(where: { $0.id == videoId }) else { return }
-            videos[index].category = category
+            videos[index].folder = folder
             writeUnsafe(videos)
         }
     }
