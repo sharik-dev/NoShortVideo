@@ -16,8 +16,6 @@ struct SettingsView: View {
     @AppStorage("blurThumbnails")       private var blurThumbnails: Bool    = false
     @AppStorage("grayscaleMode")        private var grayscaleMode: Bool     = false
     @AppStorage("appLanguage")          private var lang: String            = "en"
-    @AppStorage("stepModeEnabled")      private var stepModeEnabled: Bool   = false
-    @AppStorage("stepsPerMinute")       private var stepsPerMinute: Int     = 100
 
     @Environment(\.dismiss) private var dismiss
 
@@ -69,36 +67,6 @@ struct SettingsView: View {
                     ))
                 }
 
-                // ── Mode Pas ──
-                Section {
-                    Toggle(isOn: $stepModeEnabled) {
-                        Label(t("Mode Pas", "Step Mode"), systemImage: "figure.walk")
-                    }
-                    if stepModeEnabled {
-                        Stepper(
-                            t("Conversion : \(stepsPerMinute) pas/min", "Conversion: \(stepsPerMinute) steps/min"),
-                            value: $stepsPerMinute,
-                            in: 10...500,
-                            step: 10
-                        )
-                    }
-                } header: {
-                    Text(t("Mode Pas", "Step Mode"))
-                } footer: {
-                    if stepModeEnabled {
-                        Text(t(
-                            "Vos pas du jour se convertissent en minutes de visionnage. Marcher pendant l'utilisation recharge le temps en direct.",
-                            "Your daily steps convert to watch time. Walking while the app is open charges time in real time."
-                        ))
-                    } else {
-                        Text(t(
-                            "Activez ce mode pour gagner du temps en marchant plutôt qu'en réglant une limite fixe.",
-                            "Enable this mode to earn watch time by walking instead of setting a fixed limit."
-                        ))
-                    }
-                }
-                .disabled(!gaugeEnabled)
-
                 // ── Daily limit ──
                 Section {
                     Stepper(
@@ -115,7 +83,7 @@ struct SettingsView: View {
                         "The gauge fills over this duration (default: 60 min)."
                     ))
                 }
-                .disabled(!gaugeEnabled || stepModeEnabled)
+                .disabled(!gaugeEnabled)
 
                 // ── Block on limit ──
                 Section {

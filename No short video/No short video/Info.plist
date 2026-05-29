@@ -60,9 +60,5 @@
         <string>audio</string>
     </array>
 
-    <key>NSHealthShareUsageDescription</key>
-    <string>MeowTube lit vos pas du jour pour calculer votre temps de visionnage gagné.</string>
-    <key>NSMotionUsageDescription</key>
-    <string>MeowTube compte vos pas pendant l'utilisation pour vous faire gagner du temps en marchant.</string>
 </dict>
 </plist>

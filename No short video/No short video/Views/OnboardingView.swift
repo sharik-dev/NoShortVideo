@@ -30,8 +30,8 @@ private let slides: [OnboardingSlide] = [
         iconColor: .orange,
         title: "Control Your Time",
         titleFR: "Maîtrisez votre temps",
-        body: "Set a daily limit and watch the gauge count down. Enable Step Mode to earn watch time by walking.",
-        bodyFR: "Fixez une limite quotidienne et suivez votre session. Activez le mode pas pour gagner du temps en marchant."
+        body: "Set a daily limit and watch the gauge count down your session time.",
+        bodyFR: "Fixez une limite quotidienne et suivez votre session avec la jauge."
     ),
     OnboardingSlide(
         icon: "bookmark.fill",

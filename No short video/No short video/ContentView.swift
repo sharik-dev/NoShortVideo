@@ -17,7 +17,6 @@ struct ContentView: View {
 
     @AppStorage("gaugeEnabled")          private var gaugeEnabled: Bool    = true
     @AppStorage("appLanguage")           private var lang: String          = "en"
-    @AppStorage("stepModeEnabled")       private var stepModeEnabled: Bool = false
     @AppStorage("hasSeenOnboarding")     private var hasSeenOnboarding: Bool = false
     @AppStorage("hasSeenQuickstart")     private var hasSeenQuickstart: Bool = false
 
@@ -65,15 +64,9 @@ struct ContentView: View {
             }
 
             if viewModel.isBlocked {
-                if stepModeEnabled {
-                    StepBlockOverlayView(viewModel: viewModel, showSettings: $showSettings)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.3), value: viewModel.isBlocked)
-                } else {
-                    blockedOverlay
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.3), value: viewModel.isBlocked)
-                }
+                blockedOverlay
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.3), value: viewModel.isBlocked)
             }
         }
         .overlayPreferenceValue(CoachMarkBoundsKey.self) { anchors in

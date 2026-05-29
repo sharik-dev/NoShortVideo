@@ -78,8 +78,8 @@ let quickstartSteps: [QuickstartStep] = [
         icon: "gearshape.fill",
         title: "Settings",
         titleFR: "Paramètres",
-        body: "Set daily time limits, enable Step Mode, and switch language.",
-        bodyFR: "Définissez vos limites quotidiennes, activez le mode pas et changez la langue."
+        body: "Set daily time limits and switch language.",
+        bodyFR: "Définissez vos limites quotidiennes et changez la langue."
     ),
 ]
 
