@@ -10,9 +10,14 @@ import Foundation
 /// Persists saved videos as a JSON file in the app's Documents directory.
 final class VideoStorageService {
 
-    static let shared = VideoStorageService()
+    /// Vidéos YouTube enregistrées depuis la webview principale.
+    static let shared = VideoStorageService(fileName: "saved_videos.json")
 
-    private let fileName = "saved_videos.json"
+    /// Morceaux YouTube Music, dans leur propre fichier : mélanger les deux
+    /// ferait apparaître des musiques dans la bibliothèque vidéo et l'inverse.
+    static let music  = VideoStorageService(fileName: "saved_music.json")
+
+    private let fileName: String
     private let queue = DispatchQueue(label: "com.noshort.videostorage", qos: .utility)
 
     private var fileURL: URL {
@@ -20,7 +25,9 @@ final class VideoStorageService {
         return docs.appendingPathComponent(fileName)
     }
 
-    private init() {}
+    private init(fileName: String) {
+        self.fileName = fileName
+    }
 
     // MARK: - Public API
 
@@ -42,6 +49,9 @@ final class VideoStorageService {
                 videos[index].lastTime = video.lastTime
                 videos[index].duration = video.duration
                 videos[index].title = video.title
+                if video.localFileName != nil {
+                    videos[index].localFileName = video.localFileName
+                }
             } else {
                 videos.append(video)
             }
@@ -59,10 +69,17 @@ final class VideoStorageService {
         }
     }
 
-    /// Deletes a video by its ID.
+    /// Deletes a video by its ID — and its MP4, if it was downloaded.
     func delete(videoId: String) {
         queue.sync {
             var videos = loadAllUnsafe()
+            for video in videos where video.id == videoId {
+                if let name = video.localFileName {
+                    let dir = SavedVideo.downloadsDirectory
+                    try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+                    try? FileManager.default.removeItem(at: dir.appendingPathComponent("\(video.id).jpg"))
+                }
+            }
             videos.removeAll { $0.id == videoId }
             writeUnsafe(videos)
         }

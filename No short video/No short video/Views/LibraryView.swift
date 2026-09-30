@@ -9,11 +9,53 @@ import SwiftUI
 
 struct LibraryView: View {
 
-    @StateObject private var libraryVM = LibraryViewModel()
-    @ObservedObject var youtubeVM: YouTubeWebViewModel
+    // Le même écran sert la bibliothèque vidéo et la bibliothèque musicale :
+    // seuls changent le magasin, l'accent, le titre et ce que fait un appui sur
+    // une ligne. Dupliquer la vue aurait fait diverger les deux au premier
+    // correctif.
+    @StateObject private var libraryVM: LibraryViewModel
     @Binding var isPresented: Bool
 
+    private let navigationTitle: String
+    private let accent: Color
+    private let emptyTitle: (fr: String, en: String)
+    private let emptyHint: (fr: String, en: String)
+    private let emptyIcon: String
+    /// Petit bouton ⬇︎ sur chaque ligne pour télécharger le favori en local.
+    /// Vidéos YouTube seulement : la bibliothèque musicale n'en a pas.
+    private let allowsDownload: Bool
+    private let downloadFormat: DownloadFormat
+    private let onOpen: (SavedVideo) -> Void
+
+    init(
+        isPresented: Binding<Bool>,
+        storage: VideoStorageService = .shared,
+        navigationTitle: String = "Library",
+        accent: Color = .red,
+        emptyTitle: (fr: String, en: String) = ("Aucun favori", "No Saved Videos"),
+        emptyHint: (fr: String, en: String) = (
+            "Appuyez sur le marque-page pendant\nla lecture pour enregistrer.",
+            "Tap the bookmark icon while watching\na video to save it here."
+        ),
+        emptyIcon: String = "bookmark.slash",
+        allowsDownload: Bool = false,
+        downloadFormat: DownloadFormat = .mp4,
+        onOpen: @escaping (SavedVideo) -> Void
+    ) {
+        _isPresented = isPresented
+        _libraryVM = StateObject(wrappedValue: LibraryViewModel(storage: storage))
+        self.navigationTitle = navigationTitle
+        self.accent = accent
+        self.emptyTitle = emptyTitle
+        self.emptyHint = emptyHint
+        self.emptyIcon = emptyIcon
+        self.allowsDownload = allowsDownload
+        self.downloadFormat = downloadFormat
+        self.onOpen = onOpen
+    }
+
     @AppStorage("appLanguage") private var lang: String = "en"
+    @ObservedObject private var downloads = VideoDownloadService.shared
 
     @State private var showNewFolderAlert: Bool = false
     @State private var newFolderName: String = ""
@@ -42,7 +84,7 @@ struct LibraryView: View {
                     }
                 }
             }
-            .navigationTitle("Library")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -59,6 +101,15 @@ struct LibraryView: View {
             }
         }
         .onAppear { libraryVM.load() }
+        // Un téléchargement qui se termine pendant qu'on regarde la liste :
+        // la ligne prend son badge « Hors ligne » sans avoir à rouvrir.
+        //
+        // `onChange` et non `onReceive(downloads.$jobs.map…)` : ce dernier
+        // recrée l'abonnement à chaque rendu, qui réémet aussitôt, recharge la
+        // liste, redessine… une boucle infinie qui figeait l'app.
+        .onChange(of: downloads.jobs.filter { $0.phase == .finished }.map(\.id)) {
+            libraryVM.load()
+        }
     }
 
     // MARK: - Folder Filter
@@ -84,7 +135,7 @@ struct LibraryView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(libraryVM.selectedFolder == value ? Color.red : Color(.systemGray5))
+            .background(libraryVM.selectedFolder == value ? accent : Color(.systemGray5))
             .foregroundStyle(libraryVM.selectedFolder == value ? Color.white : Color.primary)
             .clipShape(Capsule())
         }
@@ -95,16 +146,15 @@ struct LibraryView: View {
 
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Image(systemName: "bookmark.slash")
+            Image(systemName: emptyIcon)
                 .font(.system(size: 60))
                 .foregroundStyle(.secondary)
 
-            Text(t("Aucun favori", "No Saved Videos"))
+            Text(t(emptyTitle.fr, emptyTitle.en))
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text(t("Appuyez sur le marque-page pendant\nla lecture pour enregistrer.",
-                   "Tap the bookmark icon while watching\na video to save it here."))
+            Text(t(emptyHint.fr, emptyHint.en))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -121,7 +171,7 @@ struct LibraryView: View {
                 videoRow(video)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        youtubeVM.openVideo(video)
+                        onOpen(video)
                         isPresented = false
                     }
                     .listRowBackground(Color.clear)
@@ -198,14 +248,7 @@ struct LibraryView: View {
 
     private func videoRow(_ video: SavedVideo) -> some View {
         HStack(spacing: 14) {
-            AsyncImage(url: URL(string: video.thumbnailURL)) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().aspectRatio(16 / 9, contentMode: .fill)
-                default:
-                    thumbnailPlaceholder
-                }
-            }
+            thumbnail(for: video)
             .frame(width: 130, height: 73)
             .clipShape(RoundedRectangle(cornerRadius: 10))
 
@@ -216,14 +259,24 @@ struct LibraryView: View {
                     .lineLimit(2)
 
                 HStack(spacing: 6) {
+                    if video.isOffline {
+                        Label(t("Hors ligne", "Offline"), systemImage: "arrow.down.circle.fill")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.green.opacity(0.18))
+                            .foregroundStyle(.green)
+                            .clipShape(Capsule())
+                    }
                     if !video.folder.isEmpty {
                         Label(video.folder, systemImage: "folder.fill")
                             .font(.caption2)
                             .fontWeight(.semibold)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(Color.red.opacity(0.18))
-                            .foregroundStyle(Color.red)
+                            .background(accent.opacity(0.18))
+                            .foregroundStyle(accent)
                             .clipShape(Capsule())
                     }
                 }
@@ -243,7 +296,7 @@ struct LibraryView: View {
                             .fill(Color(.systemGray5))
                             .frame(height: 3)
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.red)
+                            .fill(accent)
                             .frame(width: geo.size.width * video.progress, height: 3)
                     }
                 }
@@ -252,11 +305,66 @@ struct LibraryView: View {
 
             Spacer(minLength: 0)
 
+            if allowsDownload && !video.isOffline {
+                downloadButton(for: video)
+            }
+
             Image(systemName: "play.circle.fill")
                 .font(.title2)
-                .foregroundStyle(.red)
+                .foregroundStyle(accent)
         }
         .padding(.vertical, 6)
+    }
+
+    /// ⬇︎ à côté du bouton lecture ; devient un anneau de progression pendant
+    /// le téléchargement. `.borderless` : sans lui, un appui sur ce bouton
+    /// déclencherait aussi l'ouverture de la ligne.
+    @ViewBuilder
+    private func downloadButton(for video: SavedVideo) -> some View {
+        if let job = downloads.job(for: video.id) {
+            ZStack {
+                Circle().stroke(Color(.systemGray4), lineWidth: 2.5)
+                Circle()
+                    .trim(from: 0, to: max(0.04, job.progress))
+                    .stroke(accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 22, height: 22)
+            .padding(6)
+        } else {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                VideoDownloadService.shared.start(
+                    videoId: video.id, title: video.title, duration: video.duration,
+                    format: downloadFormat
+                )
+            } label: {
+                Image(systemName: "arrow.down.circle")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .padding(6)
+            }
+            .buttonStyle(.borderless)
+            .tint(Color(.secondaryLabel))
+        }
+    }
+
+    /// Miniature locale si la vidéo a été téléchargée (elle doit s'afficher
+    /// sans réseau), sinon celle de YouTube.
+    @ViewBuilder
+    private func thumbnail(for video: SavedVideo) -> some View {
+        if let local = video.localThumbnail {
+            Image(uiImage: local).resizable().aspectRatio(16 / 9, contentMode: .fill)
+        } else {
+            AsyncImage(url: URL(string: video.thumbnailURL)) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().aspectRatio(16 / 9, contentMode: .fill)
+                default:
+                    thumbnailPlaceholder
+                }
+            }
+        }
     }
 
     private var thumbnailPlaceholder: some View {

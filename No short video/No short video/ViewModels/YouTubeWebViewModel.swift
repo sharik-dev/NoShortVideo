@@ -21,6 +21,8 @@ final class YouTubeWebViewModel: ObservableObject {
     @Published var sessionProgress: Double = 0.0 // 0.0 to 1.0
     @Published var isLoopEnabled: Bool = false
     @Published var isBlocked: Bool = false
+    /// Site affiché — la barre d'outils s'y adapte (cf. `SiteKind`).
+    @Published var currentSite: SiteKind = .youtube
 
     // MARK: - Properties
 
@@ -46,7 +48,24 @@ final class YouTubeWebViewModel: ObservableObject {
         // Must run before YouTube's scripts to override the Visibility API
         contentController.addUserScript(ScriptInjectionService.backgroundAudioUserScript())
         contentController.addUserScript(ScriptInjectionService.userScript())
+        // Annonces YouTube : retirées de la réponse du lecteur avant qu'il ne
+        // la lise, et rattrapées dans le lecteur si l'une passe (AdSkipService).
+        AdSkipService.userScripts().forEach(contentController.addUserScript)
+        // Bandeaux de cookies acceptés d'office, et raccourcis SSO masqués :
+        // ces flux passent par une popup ou le domaine du fournisseur, que les
+        // navigateurs embarqués ne peuvent pas mener à bout.
+        // Bouton « Ouvrir l'application » : l'app native est justement celle
+        // qu'on évite.
+        contentController.addUserScript(AppBannerService.userScript())
+        contentController.addUserScript(CookieConsentService.userScript())
+        contentController.addUserScript(SSOLoginService.userScript())
         configuration.userContentController = contentController
+
+        // Pas d'identité Safari globale ici : elle n'est posée que sur les
+        // sites qui l'exigent (X), par `WebViewNavigationDelegate.userAgent`.
+        // Annoncée partout, elle faisait servir la régie publicitaire de
+        // YouTube — c'est ce qui a fait apparaître des annonces absentes de la
+        // version publiée.
 
         // Media settings
         configuration.allowsInlineMediaPlayback = true
@@ -74,8 +93,13 @@ final class YouTubeWebViewModel: ObservableObject {
         self.navigationDelegate = navDelegate
         self.webViewState = state
 
+        // Bloqueur de pub : compilé une fois, appliqué au moteur avant toute
+        // requête (cf. AdBlockService).
+        AdBlockService.apply(to: webView)
+
         // Hook seek-on-load for video resume
         self.navigationDelegate.onDidFinish = { [weak self] in
+            self?.currentSite = SiteKind.detect(self?.webView.url)
             self?.performPendingSeek()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self?.applyDynamicScripts()
@@ -86,6 +110,7 @@ final class YouTubeWebViewModel: ObservableObject {
         // KVO: observe URL changes for SPA navigations (YouTube mobile)
         self.urlObservation = webView.observe(\.url, options: [.new]) { [weak self, weak state] webView, _ in
             DispatchQueue.main.async {
+                self?.currentSite = SiteKind.detect(webView.url)
                 state?.currentURL = webView.url
                 state?.canGoBack = webView.canGoBack
                 state?.canGoForward = webView.canGoForward
@@ -110,6 +135,14 @@ final class YouTubeWebViewModel: ObservableObject {
             }
         }
 
+        // `webViewState` est un objet à part : ses changements ne remontent pas
+        // tout seuls à ce modèle, et la barre d'outils lit `canGoBack` /
+        // `canGoForward` dessus. On les réémet ici.
+        state.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+
         // Start observing video page changes for auto-tracking
         startObservingVideoPage()
 
@@ -126,6 +159,7 @@ final class YouTubeWebViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard self?.isPanelActive == true else { return }
             self?.webView.evaluateJavaScript(
                 "var v=document.querySelector('video'); if(v&&v.paused) v.play();",
                 completionHandler: nil
@@ -145,6 +179,7 @@ final class YouTubeWebViewModel: ObservableObject {
                 let type = AVAudioSession.InterruptionType(rawValue: typeVal),
                 type == .ended
             else { return }
+            guard self?.isPanelActive == true else { return }
             try? AVAudioSession.sharedInstance().setActive(true)
             self?.webView.evaluateJavaScript(
                 "var v=document.querySelector('video'); if(v&&v.paused) v.play();",
@@ -200,6 +235,32 @@ final class YouTubeWebViewModel: ObservableObject {
     /// Loads any URL directly (used by the browser home favourites).
     func loadURL(_ url: URL) {
         webView.load(URLRequest(url: url))
+    }
+
+    /// Ce compartiment est-il celui qu'on regarde ?
+    ///
+    /// Piloté par ContentView. Quand il est faux, la vidéo est en pause et doit
+    /// le rester : les deux rattrapages qui relancent la lecture (retour
+    /// d'arrière-plan, fin d'appel téléphonique) les ignorent, sans quoi
+    /// YouTube se remettait à jouer par-dessus YouTube Music.
+    private(set) var isPanelActive = true
+
+    func setPanelActive(_ active: Bool) {
+        isPanelActive = active
+        if !active { pauseMedia() }
+    }
+
+    /// Coupe la lecture en cours.
+    ///
+    /// Appelé quand on quitte le compartiment YouTube — pour la musique ou pour
+    /// un autre site. `backgroundAudioScript` fait croire à YouTube que la page
+    /// est toujours visible, ce qui est exactement ce qu'on veut quand l'app
+    /// passe en arrière-plan, et exactement ce qu'on ne veut pas quand on part
+    /// ailleurs dans l'app : sans cet appel, la vidéo continuait de jouer sous
+    /// YouTube Music.
+    func pauseMedia() {
+        webView.evaluateJavaScript(ScriptInjectionService.pauseAllMediaScript,
+                                   completionHandler: nil)
     }
     
     /// Performs a YouTube search with the given query.
@@ -289,6 +350,43 @@ final class YouTubeWebViewModel: ObservableObject {
                     self.showSaveError = true
                 }
             }
+        }
+    }
+
+    // MARK: - Offline Download
+
+    /// Lance le téléchargement hors ligne de la vidéo à l'écran. Tout se passe
+    /// en coulisse (cf. `VideoDownloadService`) : on ne fait ici qu'identifier
+    /// la vidéo, avec les mêmes stratégies que le favori.
+    func downloadCurrentVideo() {
+        webView.evaluateJavaScript(ScriptInjectionService.videoInfoScript) { [weak self] result, _ in
+            guard let self else { return }
+
+            var info: [String: Any] = [:]
+            if let json = result as? String, let data = json.data(using: .utf8),
+               let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                info = parsed
+            }
+
+            var videoId = info["videoId"] as? String ?? ""
+            if videoId.isEmpty { videoId = self.extractVideoIdFromSwift() ?? "" }
+            if videoId.isEmpty, let raw = info["url"] as? String { videoId = self.extractVideoId(from: raw) ?? "" }
+
+            guard !videoId.isEmpty else {
+                self.saveErrorMessage = UserDefaults.standard.string(forKey: "appLanguage") == "fr"
+                    ? "Ouvrez une vidéo YouTube pour la télécharger."
+                    : "Open a YouTube video to download it."
+                self.showSaveError = true
+                return
+            }
+
+            var title = info["title"] as? String ?? ""
+            if title.isEmpty || title == "YouTube" { title = "Video \(videoId)" }
+            VideoDownloadService.shared.start(
+                videoId: videoId,
+                title: title,
+                duration: info["duration"] as? Double ?? 0
+            )
         }
     }
 
@@ -393,6 +491,11 @@ final class YouTubeWebViewModel: ObservableObject {
         let elapsed = Date().timeIntervalSince(startTime)
         sessionProgress = min(1.0, elapsed / currentDailyLimitSeconds)
         checkBlockingState()
+
+        // Count one second of app usage only while actually on screen.
+        if UIApplication.shared.applicationState == .active {
+            DailyStatsStore.shared.tick()
+        }
     }
 
     // MARK: - Dynamic Settings Scripts
@@ -426,6 +529,9 @@ final class YouTubeWebViewModel: ObservableObject {
         webView.evaluateJavaScript(recsScript, completionHandler: nil)
         webView.evaluateJavaScript(blurScript, completionHandler: nil)
         webView.evaluateJavaScript(grayScript, completionHandler: nil)
+
+        // Le bloqueur s'ajoute et se retire à chaud : pas besoin de recharger.
+        AdBlockService.apply(to: webView)
     }
 
     func checkBlockingState() {
@@ -446,6 +552,15 @@ final class YouTubeWebViewModel: ObservableObject {
                 } else {
                     self?.stopTracking()
                 }
+            }
+            .store(in: &cancellables)
+
+        // Count each distinct video opened towards today's watch total.
+        webViewState.$currentVideoId
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { id in
+                DailyStatsStore.shared.recordVideoWatched(id: id)
             }
             .store(in: &cancellables)
     }

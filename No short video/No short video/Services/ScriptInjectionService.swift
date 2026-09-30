@@ -81,8 +81,18 @@ enum ScriptInjectionService {
 
             removeShorts();
 
-            var observer = new MutationObserver(function() { removeShorts(); });
-            observer.observe(document.body, { childList: true, subtree: true });
+            // Un seul observateur pour toute la durée de vie du document, et
+            // débouncé : ce script est réinjecté à chaque navigation SPA, et
+            // sans cette garde on empilait un observateur de plus à chaque
+            // fois, chacun relançant une quinzaine de querySelectorAll
+            // plein-document à la moindre mutation.
+            if (window._nsvShortsObserver) window._nsvShortsObserver.disconnect();
+            var pending;
+            window._nsvShortsObserver = new MutationObserver(function() {
+                clearTimeout(pending);
+                pending = setTimeout(removeShorts, 100);
+            });
+            window._nsvShortsObserver.observe(document.body, { childList: true, subtree: true });
         })();
         """
     }
@@ -109,8 +119,13 @@ enum ScriptInjectionService {
 
             removeAds();
 
-            var observer = new MutationObserver(function() { removeAds(); });
-            observer.observe(document.body, { childList: true, subtree: true });
+            if (window._nsvAdsObserver) window._nsvAdsObserver.disconnect();
+            var pending;
+            window._nsvAdsObserver = new MutationObserver(function() {
+                clearTimeout(pending);
+                pending = setTimeout(removeAds, 100);
+            });
+            window._nsvAdsObserver.observe(document.body, { childList: true, subtree: true });
         })();
         """
     }
@@ -120,6 +135,8 @@ enum ScriptInjectionService {
     static var hideRecommendationsScript: String {
         """
         (function() {
+            var h = (location.hostname || '').toLowerCase();
+            if (!(h === 'youtube.com' || h.endsWith('.youtube.com'))) return;
             if (window._nsv_hideRecs_observer) window._nsv_hideRecs_observer.disconnect();
             function hideRecs() {
                 var path = window.location.pathname;
@@ -145,7 +162,11 @@ enum ScriptInjectionService {
                 });
             }
             hideRecs();
-            window._nsv_hideRecs_observer = new MutationObserver(hideRecs);
+            var pending;
+            window._nsv_hideRecs_observer = new MutationObserver(function() {
+                clearTimeout(pending);
+                pending = setTimeout(hideRecs, 100);
+            });
             window._nsv_hideRecs_observer.observe(document.body, { childList: true, subtree: true });
         })();
         """
@@ -358,11 +379,40 @@ enum ScriptInjectionService {
         """
         (function() {
             function addBottomMargin() {
-                document.body.style.paddingBottom = '60px';
+                // Ne réécrire que si la valeur a changé : réassigner un style
+                // identique à chaque mutation forçait un reflow synchrone, ce
+                // qui figeait le défilement sur les fils infinis.
+                if (document.body.style.paddingBottom !== '60px') {
+                    document.body.style.paddingBottom = '60px';
+                }
             }
             addBottomMargin();
-            var observer = new MutationObserver(function() { addBottomMargin(); });
-            observer.observe(document.body, { childList: true, subtree: true });
+            if (window._nsvMarginObserver) window._nsvMarginObserver.disconnect();
+            var pending;
+            window._nsvMarginObserver = new MutationObserver(function() {
+                clearTimeout(pending);
+                pending = setTimeout(addBottomMargin, 200);
+            });
+            window._nsvMarginObserver.observe(document.body, { childList: true, subtree: true });
+        })();
+        """
+    }
+
+    // MARK: - Mise en sourdine
+
+    /// Met en pause tout ce qui joue dans la page.
+    ///
+    /// Sert au cloisonnement : quitter un compartiment doit le faire taire. La
+    /// page est laissée telle quelle — on y revient à la seconde près, il n'y a
+    /// que le son qui s'arrête.
+    static var pauseAllMediaScript: String {
+        """
+        (function() {
+            try {
+                document.querySelectorAll('video, audio').forEach(function(m) {
+                    try { m.pause(); } catch (e) {}
+                });
+            } catch (e) {}
         })();
         """
     }
@@ -467,11 +517,33 @@ enum ScriptInjectionService {
     /// Bottom margin is only added on iPhone where the toolbar sits at the bottom.
     static var allScripts: String {
         // pipOverlayScript removed — PiP is handled by the native PiPFloatingButton
-        var scripts = hideShortsScript + "\n" + hideAdsScript
+        // Shorts et pubs sont des notions YouTube : filtrés par hôte.
+        var scripts = youTubeOnly(hideShortsScript + "\n" + hideAdsScript)
+        // La marge basse, elle, vaut pour tous les sites : c'est la place de la
+        // barre d'outils de l'app.
         if UIDevice.current.userInterfaceIdiom == .phone {
             scripts += "\n" + bottomMarginScript
         }
         return scripts
+    }
+
+    /// Enveloppe un script pour qu'il ne s'exécute que sur YouTube.
+    ///
+    /// La même webview sert Instagram, X, LinkedIn et Twitch : sans cette
+    /// garde, les sélecteurs `ytm-*`/`ytd-*` — qui ne matchent jamais rien
+    /// ailleurs — faisaient tourner leurs observateurs et leurs
+    /// `querySelectorAll` plein-document sur le fil infini d'Instagram, pour
+    /// rien. Les vidéos courtes des autres réseaux sont traitées par
+    /// `SocialShortsService`, lui aussi filtré par hôte.
+    static func youTubeOnly(_ body: String) -> String {
+        """
+        (function() {
+            var h = (location.hostname || '').toLowerCase();
+            function on(d) { return h === d || h.endsWith('.' + d); }
+            if (!on('youtube.com') && !on('youtu.be')) return;
+        \(body)
+        })();
+        """
     }
 
     /// Returns a `WKUserScript` ready to be added to a content controller.

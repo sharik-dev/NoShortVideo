@@ -7,12 +7,35 @@
 
 import SwiftUI
 
+/// Ce que la barre d'outils doit afficher et déclencher pour le compartiment
+/// actuellement à l'écran.
+///
+/// La barre ne connaît plus les modèles : YouTube, YouTube Music et chaque
+/// réseau social ont leur propre webview (cf. `SiteWebViewModel`), et c'est
+/// ContentView — seul à savoir lequel est affiché — qui remplit cette
+/// description. Sans elle, il fallait un `if isShowingMusic` par bouton.
+struct BrowserToolbarConfig {
+    var canGoBack: Bool
+    var canGoForward: Bool
+    /// Le favori et la bibliothèque n'existent que là où il y a quelque chose à
+    /// enregistrer : YouTube et YouTube Music (cf. `SiteKind`).
+    var showsBookmark: Bool = false
+    var showsLibrary: Bool = false
+    var libraryIcon: String = "books.vertical"
+    /// Pastille rouge sur la bibliothèque : un téléchargement y est arrivé.
+    var libraryBadge: Bool = false
+    var onBack: () -> Void
+    var onForward: () -> Void
+    var onReload: () -> Void
+    var onBookmark: () -> Void = {}
+    var onLibrary: () -> Void = {}
+}
+
 /// Adaptive toolbar: horizontal bottom bar on iPhone, vertical right bar on iPad/Mac.
 /// Glass styling with per-icon glow, matching and exceeding the SessionGaugeView aesthetic.
 struct ToolbarView: View {
 
-    @ObservedObject var viewModel: YouTubeWebViewModel
-    @Binding var showLibrary: Bool
+    let config: BrowserToolbarConfig
     var onCollapse: () -> Void
     var onHome: () -> Void
     var onSettings: () -> Void
@@ -26,24 +49,34 @@ struct ToolbarView: View {
             : AnyLayout(VStackLayout(spacing: 0))
 
         layout {
-            toolbarButton(icon: "chevron.left",
-                          disabled: !viewModel.webViewState.canGoBack) { viewModel.goBack() }
+            toolbarButton(icon: "chevron.left", disabled: !config.canGoBack) { config.onBack() }
                 .coachMark(.back)
 
-            toolbarButton(icon: "chevron.right",
-                          disabled: !viewModel.webViewState.canGoForward) { viewModel.goForward() }
+            toolbarButton(icon: "chevron.right", disabled: !config.canGoForward) { config.onForward() }
                 .coachMark(.forward)
 
-            toolbarButton(icon: "bookmark.fill",
-                          disabled: false, accent: true) { viewModel.saveCurrentVideo() }
-                .coachMark(.bookmark)
+            if config.showsBookmark {
+                toolbarButton(icon: "bookmark.fill", disabled: false, accent: true) { config.onBookmark() }
+                    .coachMark(.bookmark)
+            }
 
-            toolbarButton(icon: "books.vertical",
-                          disabled: false) { showLibrary = true }
-                .coachMark(.library)
+            if config.showsLibrary {
+                toolbarButton(icon: config.libraryIcon, disabled: false) { config.onLibrary() }
+                    .overlay(alignment: .center) {
+                        if config.libraryBadge {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 9, height: 9)
+                                .overlay(Circle().stroke(.black.opacity(0.4), lineWidth: 1))
+                                .offset(x: 12, y: -11)
+                                .shadow(color: .red.opacity(0.7), radius: 4)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .coachMark(.library)
+            }
 
-            toolbarButton(icon: "arrow.clockwise",
-                          disabled: false) { viewModel.reload() }
+            toolbarButton(icon: "arrow.clockwise", disabled: false) { config.onReload() }
                 .coachMark(.reload)
 
             toolbarButton(icon: "house",

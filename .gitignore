@@ -1,0 +1,7 @@
+.env.local
+.env
+
+# Build Xcode local
+.derivedData/
+DerivedData/
+xcuserdata/

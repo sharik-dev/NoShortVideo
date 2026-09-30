@@ -13,7 +13,11 @@ final class LibraryViewModel: ObservableObject {
     @Published var videos: [SavedVideo] = []
     @Published var selectedFolder: String? = nil
 
-    private let storage = VideoStorageService.shared
+    private let storage: VideoStorageService
+
+    init(storage: VideoStorageService = .shared) {
+        self.storage = storage
+    }
 
     // MARK: - Derived
 

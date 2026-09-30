@@ -5,7 +5,7 @@
 //  Created by Sharik Mohamed on 05/03/2026.
 //
 
-import Foundation
+import UIKit
 
 struct SavedVideo: Codable, Identifiable {
 
@@ -18,10 +18,14 @@ struct SavedVideo: Codable, Identifiable {
     var dateAdded: Date
     /// User-defined folder name. Empty string = no folder.
     var folder: String
+    /// Fichier MP4 téléchargé, relatif à `SavedVideo.downloadsDirectory`.
+    /// `nil` = vidéo en ligne seulement (favori classique).
+    var localFileName: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title, thumbnailURL, url, lastTime, duration, dateAdded
         case folder
+        case localFileName
         case category // legacy
     }
 
@@ -41,6 +45,7 @@ struct SavedVideo: Codable, Identifiable {
         } else {
             folder = try c.decodeIfPresent(String.self, forKey: .category) ?? ""
         }
+        localFileName = try c.decodeIfPresent(String.self, forKey: .localFileName)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -53,6 +58,7 @@ struct SavedVideo: Codable, Identifiable {
         try c.encode(duration, forKey: .duration)
         try c.encode(dateAdded, forKey: .dateAdded)
         try c.encode(folder, forKey: .folder)
+        try c.encodeIfPresent(localFileName, forKey: .localFileName)
     }
 
     init(
@@ -63,7 +69,8 @@ struct SavedVideo: Codable, Identifiable {
         lastTime: Double,
         duration: Double,
         dateAdded: Date,
-        folder: String = ""
+        folder: String = "",
+        localFileName: String? = nil
     ) {
         self.id           = id
         self.title        = title
@@ -73,7 +80,43 @@ struct SavedVideo: Codable, Identifiable {
         self.duration     = duration
         self.dateAdded    = dateAdded
         self.folder       = folder
+        self.localFileName = localFileName
     }
+
+    // MARK: - Offline
+
+    /// `Documents/Downloads` : les MP4 téléchargés. Dans Documents plutôt que
+    /// Caches, sinon iOS les purge quand le stockage manque — et une vidéo
+    /// « disponible hors ligne » qui disparaît sans prévenir ne l'est pas.
+    nonisolated static let downloadsDirectory: URL = {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Downloads", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    /// Le fichier local, s'il existe encore sur le disque.
+    var localFileURL: URL? {
+        guard let name = localFileName else { return nil }
+        let url = Self.downloadsDirectory.appendingPathComponent(name)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    var isOffline: Bool { localFileURL != nil }
+
+    /// Miniature enregistrée à côté du MP4 (cf. `VideoDownloadService`).
+    /// Gardée en mémoire : la liste la redemande à chaque rendu, et relire le
+    /// disque à chaque fois rendait le défilement saccadé.
+    var localThumbnail: UIImage? {
+        guard localFileName != nil else { return nil }
+        if let cached = Self.thumbnailCache.object(forKey: id as NSString) { return cached }
+        let url = Self.downloadsDirectory.appendingPathComponent("\(id).jpg")
+        guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+        Self.thumbnailCache.setObject(image, forKey: id as NSString)
+        return image
+    }
+
+    private static let thumbnailCache = NSCache<NSString, UIImage>()
 
     // MARK: - Convenience
 

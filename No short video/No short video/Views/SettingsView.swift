@@ -10,11 +10,13 @@ import SwiftUI
 struct SettingsView: View {
 
     @AppStorage("dailyLimitMinutes")    private var dailyLimitMinutes: Int  = 60
-    @AppStorage("gaugeEnabled")         private var gaugeEnabled: Bool      = true
+    @AppStorage("gaugeEnabled")         private var gaugeEnabled: Bool      = false
+    @AppStorage("statsEnabled")         private var statsEnabled: Bool      = false
     @AppStorage("blockOnLimit")         private var blockOnLimit: Bool      = false
     @AppStorage("hideRecommendations")  private var hideRecommendations: Bool = false
     @AppStorage("blurThumbnails")       private var blurThumbnails: Bool    = false
     @AppStorage("grayscaleMode")        private var grayscaleMode: Bool     = false
+    @AppStorage("adBlockEnabled")       private var adBlockEnabled: Bool    = true
     @AppStorage("appLanguage")          private var lang: String            = "en"
 
     @Environment(\.dismiss) private var dismiss
@@ -57,6 +59,21 @@ struct SettingsView: View {
                     ))
                 }
 
+                // ── Bloqueur de pub ──
+                Section {
+                    Toggle(isOn: $adBlockEnabled) {
+                        Label(t("Bloqueur de publicité", "Ad blocker"),
+                              systemImage: "shield.lefthalf.filled")
+                    }
+                } header: {
+                    Text(t("Publicité", "Advertising"))
+                } footer: {
+                    Text(t(
+                        "Bloque les régies publicitaires avant le chargement, sur tous les sites. Les flux vidéo et la connexion Google ne sont jamais bloqués.",
+                        "Blocks ad networks before they load, on every site. Video streams and Google sign-in are never blocked."
+                    ))
+                }
+
                 // ── Gauge ──
                 Section {
                     Toggle(t("Afficher la jauge", "Show session gauge"), isOn: $gaugeEnabled)
@@ -64,6 +81,19 @@ struct SettingsView: View {
                     Text(t(
                         "La jauge apparaît à gauche et indique le temps restant.",
                         "The gauge appears on the left and shows remaining time."
+                    ))
+                }
+
+                // ── Live stats ──
+                Section {
+                    Toggle(isOn: $statsEnabled) {
+                        Label(t("Statistiques en direct", "Live stats"),
+                              systemImage: "chart.bar.fill")
+                    }
+                } footer: {
+                    Text(t(
+                        "Affiche en direct le nombre de vidéos vues et le temps passé sur l'app aujourd'hui.",
+                        "Shows a live count of videos watched and time spent on the app today."
                     ))
                 }
 
