@@ -18,15 +18,21 @@ struct BrowserHomeView: View {
     var onOpen: (URL, Bool) -> Void
     /// Ouvre la bibliothèque (favoris + vidéos hors ligne).
     var onOpenLibrary: () -> Void = {}
+    /// Ouvre les statistiques d'utilisation par site.
+    var onOpenStats: () -> Void = {}
 
     @AppStorage(VideoDownloadService.unseenKey) private var unseenDownloads: Int = 0
     /// Nombre de vidéos disponibles hors ligne, affiché sous la tuile.
     @State private var offlineCount = 0
+    /// Temps passé aujourd'hui, tous sites confondus.
+    @State private var todayUsage: Double = 0
 
     @AppStorage("appLanguage") private var lang: String = "en"
+    @AppStorage(HomeCatView.enabledKey) private var catEnabled = true
+    @AppStorage("dailyLimitMinutes") private var dailyLimitMinutes = 60
+    /// Cadres des tuiles, pour que le chat puisse s'y asseoir.
+    @State private var catPerches: [CGRect] = []
 
-    @State private var searchText = ""
-    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         ZStack {
@@ -35,15 +41,26 @@ struct BrowserHomeView: View {
             VStack(spacing: 0) {
 
                 // ── Header ──
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(t("Que veux-tu regarder ?", "What do you want to watch?"))
-                            .font(.title2.bold())
-                        Text(t("Choisis une plateforme ou recherche", "Choose a platform or search"))
+                // Les tuiles mènent aussi bien à de la musique, des réseaux
+                // sociaux ou la bibliothèque qu'à de la vidéo : le titre ne
+                // parle donc plus de « regarder », mais de la promesse de
+                // l'app — le web habituel, sans les vidéos courtes.
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(greeting.text, systemImage: greeting.icon)
+                            .font(.footnote.weight(.semibold))
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+                            .foregroundStyle(Self.tileAccent)
+                        Text(t("Où va-t-on ?", "Where to?"))
+                            .font(.largeTitle.bold())
+                        Text(t("Tes sites habituels, sans les vidéos courtes.",
+                               "Your usual sites, minus the short videos."))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer()
+                    Spacer(minLength: 12)
                     Button { isPresented = false } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
@@ -51,48 +68,17 @@ struct BrowserHomeView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(t("Fermer", "Close"))
                 }
                 .padding(.horizontal, 24)
-                .padding(.top, 56)
-                .padding(.bottom, 28)
-
-                // ── Search bar ──
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.system(size: 16, weight: .medium))
-
-                    TextField(
-                        t("Rechercher ou entrer une URL…",
-                          "Search or enter a URL…"),
-                        text: $searchText
-                    )
-                    .focused($isSearchFocused)
-                    .submitLabel(.go)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .onSubmit { submitSearch() }
-
-                    if !searchText.isEmpty {
-                        Button { searchText = "" } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                        }.buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 16).padding(.vertical, 13)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.18), lineWidth: 1))
-                .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
-                .padding(.horizontal, 20)
-
-                Spacer().frame(height: 28)
+                .padding(.top, 28)
+                .padding(.bottom, 32)
 
                 // ── Tiles ──
                 // Six raccourcis : trois plateformes vidéo, puis les trois
                 // réseaux sociaux, dont seules les vidéos courtes sont
-                // retirées (cf. SocialShortsService). Deux rangées de trois, dans une
-                // ScrollView : le champ de recherche prend le focus à
-                // l'ouverture, et le clavier mangeait la seconde rangée.
+                // retirées (cf. SocialShortsService). Puis bibliothèque et
+                // statistiques : trois rangées de trois.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(t("Favoris", "Favourites"))
@@ -118,12 +104,22 @@ struct BrowserHomeView: View {
                             FavTile(
                                 name: t("Librairie", "Library"),
                                 icon: "books.vertical.fill",
-                                caption: offlineCount > 0
+                                caption: offlineCount > 0 && VideoDownloadService.showsManualDownloads
                                     ? t("\(offlineCount) hors ligne", "\(offlineCount) offline") : nil,
-                                badge: unseenDownloads > 0
+                                badge: unseenDownloads > 0 && VideoDownloadService.showsManualDownloads
                             ) {
                                 isPresented = false
                                 onOpenLibrary()
+                            }
+                            FavTile(
+                                name: t("Stats", "Stats"),
+                                icon: "chart.bar.fill",
+                                caption: todayUsage > 0
+                                    ? t("\(SiteUsageStore.format(todayUsage)) auj.",
+                                        "\(SiteUsageStore.format(todayUsage)) today") : nil
+                            ) {
+                                isPresented = false
+                                onOpenStats()
                             }
                         }
                     }
@@ -131,11 +127,30 @@ struct BrowserHomeView: View {
                     .padding(.bottom, 24)
                 }
                 .scrollIndicators(.hidden)
+
+                // Bande réservée au chat : il y marche, sous les tuiles.
+                if catEnabled {
+                    Color.clear
+                        .frame(height: HomeCatView.groundHeight)
+                        .padding(.bottom, 8)
+                }
+            }
+
+            // Le chat de l'accueil, dans la couleur des tuiles. Par-dessus
+            // tout l'écran pour pouvoir grimper sur les tuiles.
+            if catEnabled {
+                HomeCatView(
+                    color: Self.tileAccent,
+                    perches: catPerches,
+                    drowsiness: todayUsage / Double(max(1, dailyLimitMinutes) * 60)
+                )
             }
         }
+        .coordinateSpace(.named(HomeCatView.space))
+        .onPreferenceChange(CatPerchKey.self) { catPerches = $0 }
         .onAppear {
             offlineCount = VideoStorageService.shared.loadAll().filter(\.isOffline).count
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { isSearchFocused = true }
+            todayUsage = SiteUsageStore.shared.seconds(on: Date())
         }
     }
 
@@ -175,6 +190,16 @@ struct BrowserHomeView: View {
 
     private func t(_ fr: String, _ en: String) -> String { lang == "fr" ? fr : en }
 
+    /// Salut selon l'heure, avec le symbole qui va avec.
+    private var greeting: (text: String, icon: String) {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 5..<12:  return (t("Bonjour", "Good morning"), "sun.max.fill")
+        case 12..<18: return (t("Bon après-midi", "Good afternoon"), "sun.haze.fill")
+        case 18..<23: return (t("Bonsoir", "Good evening"), "moon.stars.fill")
+        default:      return (t("Encore debout", "Still up"), "moon.zzz.fill")
+        }
+    }
+
     private var backgroundGradient: some View {
         ZStack {
             Color(.systemBackground)
@@ -183,25 +208,6 @@ struct BrowserHomeView: View {
                 startPoint: .topLeading, endPoint: .bottomTrailing
             )
         }
-    }
-
-    private func submitSearch() {
-        let q = searchText.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return }
-        if q.hasPrefix("http://") || q.hasPrefix("https://") {
-            if let url = URL(string: q) { onOpen(url, false) }
-        } else if q.contains(".") && !q.contains(" ") {
-            if let url = URL(string: "https://\(q)") { onOpen(url, false) }
-        } else {
-            // Passer par onOpen aussi pour une recherche : sinon la page se
-            // charge dans la webview principale alors que YouTube Music est
-            // encore au premier plan, et on ne la voit jamais.
-            let encoded = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? q
-            if let url = URL(string: "https://m.youtube.com/results?search_query=\(encoded)") {
-                onOpen(url, false)
-            }
-        }
-        isPresented = false
     }
 }
 
@@ -245,6 +251,7 @@ private struct FavTile: View {
                         .shadow(color: accent.opacity(0.3), radius: 6, y: 2)
                 }
                 .frame(width: 76, height: 76)
+                .catPerch()
                 .overlay(alignment: .topTrailing) {
                     if badge {
                         Circle()

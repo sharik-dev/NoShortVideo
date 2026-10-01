@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"./three/build/three.module.js","three/addons/":"./three/examples/jsm/"}}</script></head>
+<body><script type="module">
+// iPhone 3D (Sketchfab « (FREE) iPhone 13 Pro 2021 », SDC PERFORMANCE, CC-BY-4.0)
+// avec une capture plaquée sur l'écran. Paramètres dans l'URL :
+//   shot, yaw, pitch, roll (degrés), fov, dist, w, h
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const q = new URLSearchParams(location.search);
+const num = (k, d) => q.has(k) ? parseFloat(q.get(k)) : d;
+const W = num('w', 1000), H = num('h', 1600);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H); renderer.setClearColor(0x000000, 0);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const key = new THREE.DirectionalLight(0xffffff, 1.2); key.position.set(2, 3, 4); scene.add(key);
+const rim = new THREE.DirectionalLight(0xff3030, num('rim', 1.6)); rim.position.set(-3, 1, -2); scene.add(rim);
+const camera = new THREE.PerspectiveCamera(num('fov', 26), W / H, 0.01, 100);
+const gltf = await new GLTFLoader().loadAsync('./iphone.glb');
+const phone = gltf.scene;
+// Le fichier contient deux téléphones : on n'en garde qu'un (`keep`).
+const keepName = q.get('keep') || 'Iphone.001_1';
+['Iphone_0', 'Iphone.001_1'].forEach(n => { const o = phone.getObjectByName(n); if (o && n !== keepName) o.parent.remove(o); });
+// Châssis doré d'origine -> titane graphite.
+phone.traverse(o => { if (o.isMesh && o.material) {
+  const m = o.material.name;
+  if (m === 'GOLD' || m === 'Back' || m === 'Material.001') { o.material = o.material.clone(); o.material.color = new THREE.Color(q.get('body') || '#2b2b2e'); o.material.metalness = 0.85; o.material.roughness = 0.32; }
+} });
+window.__mats = []; phone.traverse(o => { if (o.isMesh) window.__mats.push(o.material.name); });
+// Centrer + normaliser : hauteur du téléphone = 1.
+let box = new THREE.Box3().setFromObject(phone); const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+const s = 1 / Math.max(size.x, size.y, size.z); phone.position.sub(ctr); const pivot = new THREE.Group(); pivot.add(phone); pivot.scale.setScalar(s); scene.add(pivot);
+window.__info = { size: size.toArray().map(v => v * s), mats: [...new Set(window.__mats)] };
+if (q.get('shot')) {
+  const tex = await new THREE.TextureLoader().loadAsync(q.get('shot'));
+  tex.colorSpace = THREE.SRGBColorSpace; tex.flipY = q.get('flipY') !== '0'; tex.anisotropy = 16;
+  if (q.has('rot')) { tex.center.set(0.5, 0.5); tex.rotation = num('rot', 0) * Math.PI / 180; }
+  phone.traverse(o => { if (o.isMesh && o.material && o.material.name === 'Display') {
+    o.material = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }); } });
+}
+pivot.rotation.set(num('pitch', 0) * Math.PI / 180, (num('yaw', 0) + num('base', 90)) * Math.PI / 180, num('roll', 0) * Math.PI / 180, 'YXZ');
+camera.position.set(0, 0, num('dist', 2.4)); camera.lookAt(0, 0, 0);
+renderer.render(scene, camera);
+window.__done = true;
+</script></body></html>

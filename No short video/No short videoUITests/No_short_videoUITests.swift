@@ -18,7 +18,7 @@ final class ScreenshotTests: XCTestCase {
 
     func testCaptureScreenshots() throws {
         // 01 — Home screen (BrowserHomeView appears first as fullScreenCover)
-        let homeTitle = app.staticTexts["What do you want to watch?"]
+        let homeTitle = app.staticTexts["Where to?"]
         XCTAssertTrue(homeTitle.waitForExistence(timeout: 8))
         // Dismiss keyboard if it appeared automatically
         if app.keyboards.firstMatch.exists {

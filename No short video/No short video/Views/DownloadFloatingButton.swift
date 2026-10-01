@@ -27,7 +27,6 @@ struct DownloadFloatingButton: View {
     @State private var btnOffset: CGSize = .zero
     /// Le halo rouge respire doucement : c'est la fonction phare de l'écran.
     @State private var glowing = false
-    @GestureState private var btnDrag: CGSize = .zero
 
     private var job: DownloadJob? {
         if let videoId { return downloads.job(for: videoId) }
@@ -35,50 +34,40 @@ struct DownloadFloatingButton: View {
     }
 
     var body: some View {
-        Button {
+        ZStack {
+            if let job {
+                Circle()
+                    .stroke(.white.opacity(0.15), lineWidth: 3)
+                    .frame(width: 26, height: 26)
+                Circle()
+                    .trim(from: 0, to: max(0.04, job.progress))
+                    .stroke(Color.red, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 26, height: 26)
+                    .animation(.easeInOut(duration: 0.25), value: job.progress)
+                Image(systemName: job.phase == .downloading ? "arrow.down" : "gearshape.fill")
+                    .font(.system(size: 10, weight: .bold))
+            } else if format == .mp3 {
+                VStack(spacing: 0) {
+                    Image(systemName: "arrow.down.to.line")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("MP3")
+                        .font(.system(size: 8, weight: .heavy))
+                }
+            } else {
+                Image(systemName: "arrow.down.to.line")
+                    .font(.system(size: 17, weight: .semibold))
+            }
+        }
+        .foregroundStyle(Color(.label))
+        .frame(width: 38, height: 38)
+        .background(glassBackground)
+        .contentShape(Rectangle())
+        .floatingDrag(offset: $btnOffset) {
             guard job == nil else { return }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             action()
-        } label: {
-            ZStack {
-                if let job {
-                    Circle()
-                        .stroke(.white.opacity(0.15), lineWidth: 3)
-                        .frame(width: 26, height: 26)
-                    Circle()
-                        .trim(from: 0, to: max(0.04, job.progress))
-                        .stroke(Color.red, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 26, height: 26)
-                        .animation(.easeInOut(duration: 0.25), value: job.progress)
-                    Image(systemName: job.phase == .downloading ? "arrow.down" : "gearshape.fill")
-                        .font(.system(size: 10, weight: .bold))
-                } else if format == .mp3 {
-                    VStack(spacing: 0) {
-                        Image(systemName: "arrow.down.to.line")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("MP3")
-                            .font(.system(size: 8, weight: .heavy))
-                    }
-                } else {
-                    Image(systemName: "arrow.down.to.line")
-                        .font(.system(size: 17, weight: .semibold))
-                }
-            }
-            .foregroundStyle(Color(.label))
-            .frame(width: 38, height: 38)
-            .background(glassBackground)
         }
-        .buttonStyle(.plain)
-        .offset(x: btnOffset.width + btnDrag.width, y: btnOffset.height + btnDrag.height)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 4)
-                .updating($btnDrag) { value, state, _ in state = value.translation }
-                .onEnded { value in
-                    btnOffset.width  += value.translation.width
-                    btnOffset.height += value.translation.height
-                }
-        )
         .transition(.scale.combined(with: .opacity))
         .onAppear {
             withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
@@ -122,7 +111,6 @@ struct DownloadPillOverlay: View {
 
     @AppStorage("downloadPillCollapsed") private var collapsed = false
     @State private var squareOffset: CGSize = .zero
-    @GestureState private var squareDrag: CGSize = .zero
 
     var body: some View {
         if let job = downloads.activeJob {
@@ -153,11 +141,9 @@ struct DownloadPillOverlay: View {
             HStack {
                 Spacer()
                 SquareProgress(job: job)
-                    .offset(x: squareOffset.width + squareDrag.width,
-                            y: squareOffset.height + squareDrag.height)
                     // Terminé : le carré mène à la bibliothèque, où la vidéo
                     // vient d'arriver. Sinon il rouvre la pastille.
-                    .onTapGesture {
+                    .floatingDrag(offset: $squareOffset) {
                         if job.phase == .finished {
                             downloads.dismiss(job.id)
                             onOpenLibrary()
@@ -165,14 +151,6 @@ struct DownloadPillOverlay: View {
                             withAnimation(.spring(response: 0.35)) { collapsed = false }
                         }
                     }
-                    .gesture(
-                        DragGesture(minimumDistance: 4)
-                            .updating($squareDrag) { v, s, _ in s = v.translation }
-                            .onEnded { v in
-                                squareOffset.width  += v.translation.width
-                                squareOffset.height += v.translation.height
-                            }
-                    )
                     .padding(.trailing, 14)
                     .padding(.top, 60)
             }
@@ -196,6 +174,10 @@ private struct SquareProgress: View {
                     .foregroundStyle(.green)
             case .failed:
                 Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.orange)
+            case .waiting:
+                Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 20))
                     .foregroundStyle(.orange)
             case .preparing, .downloading:

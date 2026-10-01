@@ -8,8 +8,9 @@ import WebKit
 /// Étend la seule promesse de l'app — pas de vidéo courte — aux trois réseaux
 /// ajoutés à l'écran d'accueil.
 ///
-/// Les Reels d'Instagram, l'onglet vidéo immersive de X et le fil vidéo de
-/// LinkedIn disparaissent, exactement comme les Shorts sur YouTube. Le fil, les
+/// Les Reels d'Instagram, les vidéos de X (celles du fil comme le lecteur
+/// immersif, qui y mène au premier appui) et le fil vidéo de LinkedIn
+/// disparaissent, exactement comme les Shorts sur YouTube. Le fil, les
 /// stories, la navigation, les messages : tout le reste est laissé intact. Une
 /// version précédente masquait aussi le fil et les stories — c'était une autre
 /// app, pas celle-ci.
@@ -84,6 +85,21 @@ enum SocialShortsService {
                 '  color: rgba(142,142,147,0.9) !important;',
                 '  font-size: 13px !important;',
                 '  font-family: -apple-system, system-ui, sans-serif !important;',
+                '}',
+                // Le cadre pointillé, mais posé sur la boîte d'origine : même
+                // taille, seul le contenu disparaît sous l'étiquette.
+                '._nsv-veil { position: relative !important; pointer-events: none !important; }',
+                '._nsv-veil > * { visibility: hidden !important; }',
+                '._nsv-veil::after {',
+                '  content: attr(data-nsv-label);',
+                '  position: absolute; inset: 0;',
+                '  display: flex; align-items: center; justify-content: center;',
+                '  border: 1px dashed rgba(142,142,147,0.35);',
+                '  border-radius: 14px;',
+                '  color: rgba(142,142,147,0.9);',
+                '  font-size: 13px;',
+                '  font-family: -apple-system, system-ui, sans-serif;',
+                '  visibility: visible;',
                 '}'
             ].join('\\n');
             (document.head || document.documentElement).appendChild(s);
@@ -95,6 +111,27 @@ enum SocialShortsService {
         function blank(el) {
             if (el && !el.classList.contains('_nsv-blank')) {
                 el.classList.add('_nsv-blank');
+            }
+        }
+
+        // Comme `blank`, mais l'emplacement vide devient le cadre pointillé
+        // « Vidéo courte masquée ». Un petit élément (onglet, icône) n'a pas la
+        // place d'une étiquette : il reste simplement invisible. Hauteur nulle =
+        // pas encore mis en page, on repassera à la prochaine mutation.
+        function veil(el) {
+            if (!el || el.classList.contains('_nsv-veil') || el.classList.contains('_nsv-blank')) return;
+            if (el.parentElement && el.parentElement.closest('._nsv-veil')) return;
+            var h = el.getBoundingClientRect().height;
+            if (h === 0) return;
+            if (h < 60) { blank(el); return; }
+            el.setAttribute('data-nsv-label', LABEL);
+            el.classList.add('_nsv-veil');
+            // Masquée ne veut pas dire muette : une vidéo cachée qui continue
+            // de jouer s'entendrait encore.
+            var videos = el.querySelectorAll('video');
+            for (var i = 0; i < videos.length; i++) {
+                videos[i].muted = true;
+                videos[i].pause();
             }
         }
 
@@ -184,8 +221,17 @@ enum SocialShortsService {
             for (var i = 0; i < entries.length; i++) {
                 var entry = entries[i].closest('a') || entries[i];
                 // Le fil de X est virtualisé et mesuré : on garde la boîte.
-                blank(entry);
+                veil(entry);
             }
+
+            // Les vidéos des tweets : sur X elles se lancent seules dans le fil
+            // et ouvrent le défilement immersif au premier appui — des Shorts
+            // sous un autre nom. Le lecteur est remplacé par le cadre
+            // pointillé ; le texte du tweet reste lisible.
+            var players = document.querySelectorAll(
+                '[data-testid="videoPlayer"], [data-testid="videoComponent"]'
+            );
+            for (var j = 0; j < players.length; j++) veil(players[j]);
 
             if (location.pathname.indexOf('/i/immersive') === 0) redirectOnce('/home');
         }

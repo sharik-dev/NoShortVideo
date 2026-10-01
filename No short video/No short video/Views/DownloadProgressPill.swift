@@ -85,6 +85,10 @@ struct DownloadProgressPill: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 22))
                 .foregroundStyle(.orange)
+        case .waiting:
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 22))
+                .foregroundStyle(.orange)
         case .preparing, .downloading:
             ZStack {
                 Circle().stroke(.white.opacity(0.15), lineWidth: 3.5)
@@ -112,6 +116,8 @@ struct DownloadProgressPill: View {
             return t("Disponible hors ligne", "Available offline")
         case .failed:
             return t("Échec du téléchargement", "Download failed")
+        case .waiting:
+            return t("Interrompu · reprendra tout seul", "Interrupted · will resume")
         }
     }
 

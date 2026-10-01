@@ -5,6 +5,8 @@
 //  Created by Sharik Mohamed on 05/03/2026.
 //
 
+import Combine
+import StoreKit
 import SwiftUI
 
 struct ContentView: View {
@@ -18,10 +20,15 @@ struct ContentView: View {
     @State private var panel: BrowserPanel = .youtube
     @State private var showLibrary       = false
     @State private var showMusicLibrary  = false
+    /// Rayon ouvert dans la bibliothèque de l'accueil, gardé d'une fois sur l'autre.
     /// Vidéo téléchargée en cours de lecture hors ligne.
     @State private var offlineVideo: SavedVideo?
+    /// Lecteur des MP3 hors ligne, plein écran (depuis la mini-barre).
+    @State private var showMusicPlayer   = false
+    @ObservedObject private var offlineMusic = OfflineMusicPlayer.shared
     @State private var showToolbar       = true
     @State private var showSettings      = false
+    @State private var showStats         = false
     @State private var showHome          = false  // set by onAppear based on onboarding state
 
     @AppStorage("gaugeEnabled")          private var gaugeEnabled: Bool    = false
@@ -38,14 +45,17 @@ struct ContentView: View {
 
     // Draggable collapsed toolbar bubble
     @State     private var bubbleOffset: CGSize  = .zero
-    @GestureState private var bubbleDrag: CGSize = .zero
-    // Tracks whether a drag is in progress — prevents the tap from firing on drag release
-    @State private var bubbleDragActive: Bool    = false
 
     // Bandeau musique flottant (cf. musicBanner)
     @AppStorage("musicBannerFloating") private var musicFloating: Bool = false
     @State     private var musicOffset: CGSize  = .zero
-    @GestureState private var musicDrag: CGSize = .zero
+
+    @Environment(\.scenePhase) private var scenePhase
+    /// Feuille native « Noter l'app » (cf. ReviewPromptService).
+    @Environment(\.requestReview) private var requestReview
+    @ObservedObject private var reviewPrompt = ReviewPromptService.shared
+    /// Horloge du temps passé par site (cf. `countUsage`).
+    private let usageClock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var isCompact: Bool { sizeClass == .compact }
@@ -68,16 +78,23 @@ struct ContentView: View {
                                 SessionGaugeView(viewModel: viewModel)
                             }
                             PiPFloatingButton(viewModel: viewModel)
-                            if viewModel.webViewState.isOnVideoPage {
+                            // Version App Store : pas de bouton ⬇︎, seuls les
+                            // favoris musicaux se téléchargent, d'eux-mêmes
+                            // (cf. VideoDownloadService). DEBUG le garde.
+                            #if DEBUG
+                            if VideoDownloadService.showsManualDownloads,
+                               viewModel.webViewState.isOnVideoPage {
                                 DownloadFloatingButton(
                                     videoId: viewModel.webViewState.currentVideoId,
                                     action: { viewModel.downloadCurrentVideo() }
                                 )
                             }
+                            #endif
                             Spacer().frame(height: 84)
                         }
                         .padding(.leading, 6)
-                    } else if panel == .music {
+                    } else if panel == .music && VideoDownloadService.showsManualDownloads {
+                        #if DEBUG
                         // YouTube Music : téléchargement en MP3 uniquement.
                         VStack {
                             Spacer()
@@ -85,6 +102,7 @@ struct ContentView: View {
                             Spacer().frame(height: 84)
                         }
                         .padding(.leading, 6)
+                        #endif
                     }
                 }
             } else {
@@ -110,7 +128,11 @@ struct ContentView: View {
                     .animation(.spring(response: 0.4), value: viewModel.showSavedFeedback)
             }
 
-            DownloadPillOverlay(onOpenLibrary: { openLibrary() })
+            #if DEBUG
+            if VideoDownloadService.showsManualDownloads {
+                DownloadPillOverlay(onOpenLibrary: { openLibrary() })
+            }
+            #endif
 
             if viewModel.isBlocked && panel == .youtube {
                 blockedOverlay
@@ -119,14 +141,33 @@ struct ContentView: View {
             }
         }
         .overlay(alignment: musicFloating ? .bottomTrailing : .bottom) {
-            if musicVM.hasSession && panel != .music {
-                musicBanner
-            }
+            musicBanner
+        }
+        .fullScreenCover(isPresented: $showMusicPlayer) {
+            MusicPlayerView()
+        }
+        // Deux sons à la fois n'ont aucun sens : un MP3 qui démarre coupe le
+        // web, et une vidéo YouTube ou YouTube Music qui démarre coupe le MP3.
+        .onChange(of: offlineMusic.isPlaying) { _, playing in
+            guard playing else { return }
+            musicVM.pauseForVideo()
+            viewModel.pauseMedia()
+        }
+        .onChange(of: musicVM.isPlaying) { _, playing in
+            if playing { offlineMusic.pause() }
+        }
+        // Sur Instagram, X… la musique passe avant le fil : tant qu'elle joue,
+        // les vidéos de ces pages restent muettes (cf. MusicPriorityService).
+        .onChange(of: musicVM.isPlaying || offlineMusic.isPlaying, initial: true) { _, playing in
+            sites.mutesForMusic = playing
         }
         // Une vidéo YouTube qui démarre coupe la musique : deux sons en même
         // temps n'ont aucun sens. La session reste ouverte, la bannière aussi.
         .onReceive(viewModel.webViewState.$isOnVideoPage) { isOnVideo in
-            if isOnVideo && panel == .youtube { musicVM.pauseForVideo() }
+            if isOnVideo && panel == .youtube {
+                musicVM.pauseForVideo()
+                offlineMusic.pause()
+            }
         }
         // Sur YouTube, la webview musicale n'a rien à faire : la musique y est
         // déjà mise en pause, et la laisser chargée maintenait une deuxième
@@ -164,6 +205,42 @@ struct ContentView: View {
             if let id = args.string(forKey: "debugOpenVideo"),
                let url = URL(string: "https://m.youtube.com/watch?v=\(id)") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showHome = false; viewModel.loadURL(url) }
+            }
+            // `-debugOpenURL <url>` : n'importe quelle page, dans son compartiment
+            // (une page YouTube Music s'ouvre dans la webview musique).
+            if let raw = args.string(forKey: "debugOpenURL"), let url = URL(string: raw) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    showHome = false
+                    if SiteKind.isMusic(url) {
+                        open(url, isShortcut: true)
+                        if url.path == "/watch" {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { musicVM.debugLoad(url) }
+                        }
+                    } else {
+                        open(url, isShortcut: false)
+                    }
+                }
+            }
+            // `-debugOpenURL2 <url>` : une seconde page, 14 s plus tard — pour
+            // montrer le mini-lecteur pendant qu'on navigue ailleurs.
+            if let raw = args.string(forKey: "debugOpenURL2"), let url = URL(string: raw) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 14) { open(url, isShortcut: false) }
+            }
+            if args.bool(forKey: "debugMusicPlayer"),
+               let track = VideoStorageService.music.loadAll().first(where: { $0.isOffline }) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showHome = false }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    offlineMusic.play(track, in: VideoStorageService.music.loadAll())
+                    showMusicPlayer = true
+                }
+            }
+            if args.bool(forKey: "debugReview") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showHome = false }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { reviewPrompt.debugForce() }
+            }
+            if args.bool(forKey: "debugOpenStats") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showHome = false }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { showStats = true }
             }
             if args.bool(forKey: "debugOpenDownloads") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { showHome = false }
@@ -207,56 +284,47 @@ struct ContentView: View {
             }
         }
         .fullScreenCover(isPresented: $showHome) {
-            BrowserHomeView(isPresented: $showHome, onOpen: open) {
+            BrowserHomeView(
+                isPresented: $showHome,
+                onOpen: open,
                 // Laisser l'accueil se refermer avant de présenter la feuille.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { openLibrary() }
+                onOpenLibrary: {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { openLibrary() }
+                },
+                onOpenStats: {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { showStats = true }
+                }
+            )
+        }
+        .sheet(isPresented: $showStats) {
+            UsageStatsView()
+        }
+        .onReceive(usageClock) { _ in countUsage() }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .active {
+                reviewPrompt.recordActiveDay()
+                // Un téléchargement coupé par la sortie de l'app repart ici.
+                VideoDownloadService.shared.resumePending()
             }
         }
+        .onChange(of: reviewPrompt.isDue) { _, due in
+            guard due else { return }
+            askForReviewIfCalm()
+        }
         .sheet(isPresented: $showLibrary) {
-            LibraryView(
+            // Des dossiers plutôt qu'un sélecteur : Vidéos, Musique, et ceux
+            // que l'utilisateur crée pour y ranger les deux.
+            HomeLibraryView(
                 isPresented: $showLibrary,
-                allowsDownload: true
-            ) { video in
-                show(.youtube)
-                if video.isOffline {
-                    // Téléchargée : lecture locale, sans réseau. YouTube se
-                    // tait, deux sons à la fois n'ont aucun sens.
-                    viewModel.pauseMedia()
-                    musicVM.pauseForVideo()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { offlineVideo = video }
-                } else {
-                    viewModel.openVideo(video)
-                }
-            }
+                onOpenVideo: openSavedVideo,
+                onOpenTrack: openSavedTrack
+            )
         }
         .fullScreenCover(item: $offlineVideo) { video in
             OfflinePlayerScreen(video: video)
         }
         .sheet(isPresented: $showMusicLibrary) {
-            LibraryView(
-                isPresented: $showMusicLibrary,
-                storage: .music,
-                navigationTitle: t("Musique", "Music"),
-                accent: Color(red: 1, green: 0.18, blue: 0.33),
-                emptyTitle: ("Aucun morceau", "No Saved Tracks"),
-                emptyHint: (
-                    "Appuyez sur le marque-page pendant\nla lecture pour enregistrer un morceau.",
-                    "Tap the bookmark icon while a track\nis playing to save it here."
-                ),
-                allowsDownload: true,
-                downloadFormat: .mp3
-            ) { track in
-                if track.isOffline {
-                    // MP3 téléchargé : lecture locale, la session YouTube Music
-                    // se tait.
-                    musicVM.pauseForVideo()
-                    viewModel.pauseMedia()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { offlineVideo = track }
-                } else {
-                    show(.music)
-                    musicVM.openTrack(track)
-                }
-            }
+            musicLibrary(isPresented: $showMusicLibrary)
         }
         .alert(t("Enregistrement impossible", "Can't save"),
                isPresented: Binding(
@@ -278,49 +346,112 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Bibliothèques
+
+    private func musicLibrary(isPresented: Binding<Bool>) -> some View {
+        LibraryView(
+            isPresented: isPresented,
+            storage: .music,
+            navigationTitle: t("Musique", "Music"),
+            accent: Color(red: 1, green: 0.18, blue: 0.33),
+            emptyTitle: ("Aucun morceau", "No Saved Tracks"),
+            emptyHint: (
+                "Appuyez sur le marque-page pendant\nla lecture pour enregistrer un morceau.",
+                "Tap the bookmark icon while a track\nis playing to save it here."
+            ),
+            downloadFormat: .mp3,
+            onOpen: openSavedTrack
+        )
+    }
+
+    private func openSavedVideo(_ video: SavedVideo) {
+        show(.youtube)
+        if video.isOffline {
+            // Téléchargée : lecture locale, sans réseau. YouTube se
+            // tait, deux sons à la fois n'ont aucun sens.
+            viewModel.pauseMedia()
+            musicVM.pauseForVideo()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { offlineVideo = video }
+        } else {
+            viewModel.openVideo(video)
+        }
+    }
+
+    private func openSavedTrack(_ track: SavedVideo) {
+        if track.isOffline {
+            // MP3 téléchargé : lecture locale, la session YouTube Music
+            // se tait.
+            musicVM.pauseForVideo()
+            viewModel.pauseMedia()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { offlineVideo = track }
+        } else {
+            show(.music)
+            musicVM.openTrack(track)
+        }
+    }
+
     // MARK: - Bandeau musique
 
-    /// Ancré en bas, ou flottant et déplaçable au doigt.
+    /// Le bandeau de ce qui joue : la mini-barre des MP3 hors ligne, sinon
+    /// celui de YouTube Music (hors de son propre compartiment).
     ///
-    /// Le déplacement vit ici et pas dans `MusicMiniPlayerView` : la pastille
-    /// ne connaît pas l'écran, et l'offset doit survivre à ses redessins (le
-    /// titre change à chaque morceau).
+    /// Les deux se masquent de la même façon — chevron à droite → bulle ronde
+    /// qu'on déplace au doigt, un appui dessus rouvre le bandeau — et partagent
+    /// le même état : masquer l'un, c'est masquer l'autre.
+    ///
+    /// Le déplacement vit ici et pas dans la bulle : elle ne connaît pas
+    /// l'écran, et l'offset doit survivre à ses redessins (le titre change à
+    /// chaque morceau).
     @ViewBuilder
     private var musicBanner: some View {
-        let player = MusicMiniPlayerView(
-            musicVM: musicVM,
-            isFloating: musicFloating,
-            onOpen: { show(.music) },
-            onToggleFloat: {
-                withAnimation(.spring(response: 0.35)) {
-                    musicFloating.toggle()
-                    // Revenir ancré remet la pastille à sa place : sinon elle
-                    // réapparaîtrait décalée au prochain passage en flottant.
-                    if !musicFloating { musicOffset = .zero }
+        let hasOffline = offlineMusic.current != nil
+        let hasStream  = musicVM.hasSession && panel != .music
+
+        if hasOffline || hasStream {
+            Group {
+                if musicFloating {
+                    Group {
+                        if hasOffline {
+                            MusicMiniBubble()
+                        } else {
+                            MusicBubble(isPlaying: musicVM.isPlaying) {
+                                MusicBubbleIcon(isPlaying: musicVM.isPlaying)
+                            }
+                        }
+                    }
+                    .floatingDrag(offset: $musicOffset, onTap: expandMusicBanner)
+                    .padding(.trailing, 14)
+                    .padding(.bottom, showToolbar ? 78 : 18)
+                    .transition(.scale(scale: 0.3, anchor: .bottomTrailing).combined(with: .opacity))
+                } else {
+                    Group {
+                        if hasOffline {
+                            MusicMiniBar(onOpen: { showMusicPlayer = true }, onHide: hideMusicBanner)
+                        } else {
+                            MusicMiniPlayerView(musicVM: musicVM,
+                                                onOpen: { show(.music) },
+                                                onHide: hideMusicBanner)
+                        }
+                    }
+                    .padding(.bottom, showToolbar ? 78 : 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-        )
+            .animation(.spring(response: 0.35), value: offlineMusic.current?.id)
+            .animation(.spring(response: 0.35), value: musicVM.hasSession)
+        }
+    }
 
-        if musicFloating {
-            player
-                .offset(x: musicOffset.width + musicDrag.width,
-                        y: musicOffset.height + musicDrag.height)
-                .gesture(
-                    DragGesture(minimumDistance: 4)
-                        .updating($musicDrag) { v, s, _ in s = v.translation }
-                        .onEnded { v in
-                            musicOffset.width  += v.translation.width
-                            musicOffset.height += v.translation.height
-                        }
-                )
-                .padding(.trailing, 14)
-                .padding(.bottom, showToolbar ? 78 : 18)
-                .transition(.scale.combined(with: .opacity))
-        } else {
-            player
-                .padding(.bottom, showToolbar ? 78 : 16)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(.spring(response: 0.35), value: musicVM.hasSession)
+    private func hideMusicBanner() {
+        withAnimation(.spring(response: 0.35)) { musicFloating = true }
+    }
+
+    /// Rouvrir remet la bulle à sa place : sinon elle réapparaîtrait décalée
+    /// au prochain masquage.
+    private func expandMusicBanner() {
+        withAnimation(.spring(response: 0.35)) {
+            musicFloating = false
+            musicOffset = .zero
         }
     }
 
@@ -411,6 +542,13 @@ struct ContentView: View {
         }
 
         panel = target
+        // Sur un réseau social, une coupure du son ne fait pas attendre la
+        // musique la fin de la vidéo fautive (cf. AudioInterruptionMonitor).
+        if case .site = target {
+            AudioInterruptionMonitor.musicHasPriority = true
+        } else {
+            AudioInterruptionMonitor.musicHasPriority = false
+        }
 
         switch target {
         case .youtube:
@@ -428,6 +566,9 @@ struct ContentView: View {
     /// l'avait laissé (elle ne recharge rien), alors qu'une URL tapée ou une
     /// recherche demande explicitement cette page-là.
     private func open(_ url: URL, isShortcut: Bool) {
+        SiteUsageStore.shared.recordOpen(
+            SiteKind.isMusic(url) ? .music : UsageSite(SiteKind.detect(url))
+        )
         if SiteKind.isMusic(url) {
             show(.music)
             musicVM.openMusic()
@@ -451,6 +592,47 @@ struct ContentView: View {
         } else {
             session.load(url)
         }
+    }
+
+    // MARK: - Statistiques
+
+    /// Le site réellement regardé : dans le compartiment YouTube, une page
+    /// ouverte depuis un lien peut être n'importe quel autre site.
+    private var usageSite: UsageSite {
+        switch panel {
+        case .youtube:         return UsageSite(viewModel.currentSite)
+        case .music:           return .music
+        case .site(let kind):  return UsageSite(kind)
+        }
+    }
+
+    /// Une seconde de plus sur le site affiché — seulement quand on le
+    /// regarde vraiment : pas en arrière-plan, pas derrière l'accueil, une
+    /// feuille, le lecteur hors ligne ou l'écran de blocage.
+    private func countUsage() {
+        guard scenePhase == .active,
+              !showHome, !showOnboarding, !showStats, !showSettings,
+              !showLibrary, !showMusicLibrary, offlineVideo == nil,
+              !(panel == .youtube && viewModel.isBlocked)
+        else { return }
+        SiteUsageStore.shared.tick(usageSite)
+    }
+
+    // MARK: - Note App Store
+
+    /// Pose la feuille à étoiles seulement si l'écran est libre : pas pendant
+    /// l'onboarding, le blocage de session ou une vidéo hors ligne en plein
+    /// écran. Sinon, on attend la prochaine réussite.
+    private func askForReviewIfCalm() {
+        guard scenePhase == .active,
+              !showOnboarding, !showQuickstart, offlineVideo == nil, !showMusicPlayer,
+              !(panel == .youtube && viewModel.isBlocked)
+        else {
+            reviewPrompt.postpone()
+            return
+        }
+        requestReview()
+        reviewPrompt.didAsk()
     }
 
     // MARK: - Barre d'outils
@@ -541,8 +723,7 @@ struct ContentView: View {
     }
 
     // MARK: - Draggable collapsed bubble
-    // Uses .onTapGesture + DragGesture with a guard flag so a drag-release
-    // never accidentally re-opens the toolbar.
+    // `floatingDrag` so a drag-release never accidentally re-opens the toolbar.
 
     private var draggableBubble: some View {
         VStack {
@@ -555,26 +736,10 @@ struct ContentView: View {
                     .foregroundStyle(.white, .ultraThinMaterial)
                     .shadow(color: .white.opacity(0.25), radius: 12)
                     .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
-                    .offset(x: bubbleOffset.width + bubbleDrag.width,
-                            y: bubbleOffset.height + bubbleDrag.height)
-                    // Tap: only expand if no drag occurred
-                    .onTapGesture {
-                        guard !bubbleDragActive else { return }
+                    .floatingDrag(offset: $bubbleOffset) {
                         withAnimation(.spring(response: 0.35)) { showToolbar = true }
                         setBottomMargin(visible: true)
                     }
-                    // Drag: accumulate offset, set flag so tap is ignored
-                    .gesture(
-                        DragGesture(minimumDistance: 4)
-                            .onChanged { _ in bubbleDragActive = true }
-                            .updating($bubbleDrag) { v, s, _ in s = v.translation }
-                            .onEnded { v in
-                                bubbleOffset.width  += v.translation.width
-                                bubbleOffset.height += v.translation.height
-                                // Reset after the tap recognizer has already fired
-                                DispatchQueue.main.async { bubbleDragActive = false }
-                            }
-                    )
                     .padding(.bottom, 18)
                     .padding(.trailing, 18)
             }

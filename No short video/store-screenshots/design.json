@@ -1,0 +1,115 @@
+// ---------------------------------------------------------------------------
+// Meow-Tube — captures App Store (iPhone 6,5", EN + FR).
+//
+//   python3 prep.py                     # projecteur + loupes -> build/
+//   shotsmith design.json --out out     # -> out/<lang>/...
+//
+// Les captures de build/ sont de VRAIES captures de l'app (raw/, cf.
+// onboarding-captures/README.md) ; seules miniatures et titres sont des chats.
+// Écran verrouillé et PiP : fond système réel + élément iOS reconstitué
+// (le simulateur ne sait faire ni l'un ni l'autre avec WebKit).
+// ---------------------------------------------------------------------------
+{
+  "assetRoot": ".",
+  "out": "out",
+  "devices": ["iphone65"],
+  "orientation": "portrait",
+  "locales": ["en", "fr"],
+  "defaultLocale": "en",
+  "ascLocales": { "en": "en-US", "fr": "fr-FR" },
+
+  "tokens": {
+    "red": "#FF1A1A",
+    "ink": "#070707",
+    "muted": "rgba(255,255,255,0.62)"
+  },
+
+  "presets": {
+    "phone": {
+      "layers": [
+        {
+          "id": "bg", "type": "background",
+          "gradient": { "angle": 180, "stops": ["#1B0404", "#0A0A0A", "#050505"] },
+          "glows": [
+            { "x": 0.5, "y": 0.02, "r": 0.85, "color": "rgba(255,0,0,0.42)" },
+            { "x": 0.5, "y": 0.78, "r": 0.9, "color": "rgba(255,0,0,0.16)" }
+          ],
+          "pattern": { "type": "dot", "color": "#FFFFFF", "opacity": 0.035, "size": 0.03 },
+          "vignette": 0.35
+        },
+        {
+          "id": "eyebrow", "type": "eyebrow", "content": "",
+          "color": "$red", "size": 0.021, "align": "center",
+          "at": { "x": 0.5, "y": 0.052, "w": 0.9 }, "anchor": "top", "z": 5
+        },
+        {
+          "id": "headline", "type": "headline", "content": "", "transform": "none", "tracking": -0.01,
+          "accent": "$red", "size": 0.055, "weight": 800, "lineHeight": 1.04, "align": "center",
+          "at": { "x": 0.5, "y": 0.083, "w": 0.9 }, "anchor": "top", "z": 5,
+          "shadow": { "y": 0.004, "blur": 0.02, "color": "rgba(0,0,0,0.6)" }
+        },
+        {
+          "id": "shot", "type": "screenshot", "frame": "iphone", "aspect": 0.46,
+          "at": { "x": 0.5, "y": 0.255, "w": 0.8 }, "anchor": "top",
+          "shadow": { "y": 0.02, "blur": 0.07, "color": "rgba(255,0,0,0.28)" }, "z": 3
+        }
+      ]
+    },
+    "zoomed": {
+      "extends": "phone",
+      "layers": [
+        {
+          "id": "zoom", "type": "sticker", "src": "",
+          "at": { "x": 0.70, "y": 0.60, "w": 0.46 }, "anchor": "center",
+          "shadow": { "y": 0.01, "blur": 0.03, "color": "rgba(0,0,0,0.7)" },
+          "glow": { "color": "rgba(255,0,0,0.55)", "blur": 0.02 }, "z": 6
+        }
+      ]
+    }
+  },
+
+  "slides": [
+    { "id": "01-noads", "extends": "phone", "layers": [
+      { "id": "eyebrow", "content": { "en": "Zero ads", "fr": "Zéro pub" } },
+      { "id": "headline", "content": { "en": "Videos,\n*without the ads*", "fr": "Des vidéos,\n*sans la pub*" } },
+      { "id": "shot", "src": { "en": "build/watch_en.png", "fr": "build/watch_fr.png" } }
+    ]},
+    { "id": "02-download", "extends": "zoomed", "layers": [
+      { "id": "eyebrow", "content": { "en": "Offline videos", "fr": "Vidéos hors ligne" } },
+      { "id": "headline", "content": { "en": "Download\n*any video*", "fr": "Télécharge\n*tes vidéos*" } },
+      { "id": "shot", "src": { "en": "build/download_en.png", "fr": "build/download_fr.png" } },
+      { "id": "zoom", "src": { "en": "build/download_zoom_en.png", "fr": "build/download_zoom_fr.png" } }
+    ]},
+    { "id": "03-lock", "extends": "phone", "layers": [
+      { "id": "eyebrow", "content": { "en": "Background play", "fr": "Arrière-plan" } },
+      { "id": "headline", "content": { "en": "Keeps playing,\n*screen locked*", "fr": "Ça continue,\n*écran verrouillé*" } },
+      { "id": "shot", "src": { "en": "build/syslock_en.png", "fr": "build/syslock_fr.png" } }
+    ]},
+    { "id": "04-mp3", "extends": "zoomed", "layers": [
+      { "id": "eyebrow", "content": { "en": "Songs → MP3", "fr": "Tes sons → MP3" } },
+      { "id": "headline", "content": { "en": "Your music,\n*offline*", "fr": "Ta musique,\n*hors ligne*" } },
+      { "id": "shot", "src": { "en": "build/music_en.png", "fr": "build/music_fr.png" } },
+      { "id": "zoom", "src": { "en": "build/music_zoom_en.png", "fr": "build/music_zoom_fr.png" }, "at": { "x": 0.72, "y": 0.855, "w": 0.40 } }
+    ]},
+    { "id": "05-pip", "extends": "phone", "layers": [
+      { "id": "eyebrow", "content": { "en": "Picture in Picture", "fr": "Image dans l'image" } },
+      { "id": "headline", "content": { "en": "Watch\n*over any app*", "fr": "Regarde\n*par-dessus tout*" } },
+      { "id": "shot", "src": { "en": "build/syspip_en.png", "fr": "build/syspip_fr.png" } }
+    ]},
+    { "id": "06-library", "extends": "phone", "layers": [
+      { "id": "eyebrow", "content": { "en": "Library", "fr": "Librairie" } },
+      { "id": "headline", "content": { "en": "Watch it\n*on the plane*", "fr": "Regarde-la\n*dans l'avion*" } },
+      { "id": "shot", "src": { "en": "build/library_en.png", "fr": "build/library_fr.png" } }
+    ]},
+    { "id": "07-noshorts", "extends": "phone", "layers": [
+      { "id": "eyebrow", "content": { "en": "No Shorts", "fr": "Zéro Shorts" } },
+      { "id": "headline", "content": { "en": "Your sites,\n*minus the Shorts*", "fr": "Tes sites,\n*sans les Shorts*" } },
+      { "id": "shot", "src": { "en": "build/home_en.png", "fr": "build/home_fr.png" } }
+    ]},
+    { "id": "08-browse", "extends": "phone", "layers": [
+      { "id": "eyebrow", "content": { "en": "While you browse", "fr": "Pendant que tu navigues" } },
+      { "id": "headline", "content": { "en": "The music\n*follows you*", "fr": "La musique\n*te suit*" } },
+      { "id": "shot", "src": { "en": "build/background_en.png", "fr": "build/background_fr.png" } }
+    ]}
+  ]
+}

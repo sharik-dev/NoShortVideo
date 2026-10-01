@@ -1,0 +1,1202 @@
+{
+ "assetRoot": ".",
+ "out": "out3d",
+ "devices": [
+  "iphone65"
+ ],
+ "orientation": "portrait",
+ "locales": [
+  "en",
+  "fr"
+ ],
+ "defaultLocale": "en",
+ "ascLocales": {
+  "en": "en-US",
+  "fr": "fr-FR"
+ },
+ "slides": [
+  {
+   "id": "01-hero",
+   "layers": [
+    {
+     "id": "bg",
+     "type": "background",
+     "gradient": {
+      "angle": 180,
+      "stops": [
+       "#1B0404",
+       "#0B0B0B",
+       "#060606"
+      ]
+     },
+     "glows": [
+      {
+       "x": 0.5,
+       "y": 0.0,
+       "r": 0.85,
+       "color": "rgba(255,0,0,0.42)"
+      },
+      {
+       "x": 0.5,
+       "y": 0.7,
+       "r": 0.8,
+       "color": "rgba(255,0,0,0.18)"
+      }
+     ],
+     "vignette": 0.3
+    },
+    {
+     "id": "paws",
+     "type": "scatter",
+     "items": [
+      "cats/paw.png"
+     ],
+     "size": 0.045,
+     "seed": 3,
+     "opacity": 0.13,
+     "jitter": 0.4,
+     "avoid": [
+      0.2,
+      0.25,
+      0.8,
+      1
+     ],
+     "z": 1,
+     "spots": [
+      {
+       "x": 0.08,
+       "y": 0.3
+      },
+      {
+       "x": 0.14,
+       "y": 0.36
+      },
+      {
+       "x": 0.09,
+       "y": 0.43
+      },
+      {
+       "x": 0.15,
+       "y": 0.49
+      },
+      {
+       "x": 0.88,
+       "y": 0.72
+      },
+      {
+       "x": 0.93,
+       "y": 0.78
+      },
+      {
+       "x": 0.87,
+       "y": 0.85
+      },
+      {
+       "x": 0.92,
+       "y": 0.91
+      }
+     ]
+    },
+    {
+     "id": "eyebrow",
+     "type": "eyebrow",
+     "content": {
+      "en": "Meow-Tube",
+      "fr": "Meow-Tube"
+     },
+     "color": "#FF1A1A",
+     "size": 0.021,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.052,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8
+    },
+    {
+     "id": "headline",
+     "type": "headline",
+     "content": {
+      "en": "Videos & music\n*with zero ads*",
+      "fr": "Vidéos et musique\n*sans aucune pub*"
+     },
+     "accent": "#FF1A1A",
+     "size": 0.038,
+     "weight": 800,
+     "transform": "none",
+     "tracking": -0.01,
+     "lineHeight": 1.04,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.082,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8,
+     "shadow": {
+      "y": 0.004,
+      "blur": 0.02,
+      "color": "rgba(0,0,0,0.6)"
+     }
+    },
+    {
+     "id": "ph-hero_music",
+     "type": "sticker",
+     "src": {
+      "en": "phones/hero_music_en.png",
+      "fr": "phones/hero_music_fr.png"
+     },
+     "at": {
+      "x": 0.66,
+      "y": 0.6,
+      "w": 0.5929
+     },
+     "anchor": "center",
+     "z": 3,
+     "shadow": {
+      "y": 0.018,
+      "blur": 0.03,
+      "color": "rgba(0,0,0,0.75)"
+     }
+    },
+    {
+     "id": "ph-hero_watch",
+     "type": "sticker",
+     "src": {
+      "en": "phones/hero_watch_en.png",
+      "fr": "phones/hero_watch_fr.png"
+     },
+     "at": {
+      "x": 0.38,
+      "y": 0.64,
+      "w": 0.6814
+     },
+     "anchor": "center",
+     "z": 4,
+     "shadow": {
+      "y": 0.018,
+      "blur": 0.03,
+      "color": "rgba(0,0,0,0.75)"
+     }
+    },
+    {
+     "id": "cat-sitting-0.7904446443444945",
+     "type": "sticker",
+     "src": "cats/cat_sitting.png",
+     "at": {
+      "x": 0.7904446443444945,
+      "y": 0.355,
+      "w": 0.16
+     },
+     "anchor": "bottom",
+     "z": 5,
+     "rotate": 0,
+     "glow": {
+      "color": "rgba(255,0,0,0.45)",
+      "blur": 0.012
+     }
+    }
+   ]
+  },
+  {
+   "id": "02-library",
+   "layers": [
+    {
+     "id": "bg",
+     "type": "background",
+     "gradient": {
+      "angle": 180,
+      "stops": [
+       "#1B0404",
+       "#0B0B0B",
+       "#060606"
+      ]
+     },
+     "glows": [
+      {
+       "x": 0.5,
+       "y": 0.0,
+       "r": 0.85,
+       "color": "rgba(255,0,0,0.42)"
+      },
+      {
+       "x": 0.5,
+       "y": 0.75,
+       "r": 0.8,
+       "color": "rgba(255,0,0,0.2)"
+      }
+     ],
+     "vignette": 0.3
+    },
+    {
+     "id": "paws",
+     "type": "scatter",
+     "items": [
+      "cats/paw.png"
+     ],
+     "size": 0.045,
+     "seed": 5,
+     "opacity": 0.13,
+     "jitter": 0.4,
+     "avoid": [
+      0.15,
+      0.25,
+      0.85,
+      1
+     ],
+     "z": 1,
+     "spots": [
+      {
+       "x": 0.08,
+       "y": 0.3
+      },
+      {
+       "x": 0.14,
+       "y": 0.36
+      },
+      {
+       "x": 0.09,
+       "y": 0.43
+      },
+      {
+       "x": 0.15,
+       "y": 0.49
+      },
+      {
+       "x": 0.88,
+       "y": 0.72
+      },
+      {
+       "x": 0.93,
+       "y": 0.78
+      },
+      {
+       "x": 0.87,
+       "y": 0.85
+      },
+      {
+       "x": 0.92,
+       "y": 0.91
+      }
+     ]
+    },
+    {
+     "id": "eyebrow",
+     "type": "eyebrow",
+     "content": {
+      "en": "Library",
+      "fr": "Librairie"
+     },
+     "color": "#FF1A1A",
+     "size": 0.021,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.052,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8
+    },
+    {
+     "id": "headline",
+     "type": "headline",
+     "content": {
+      "en": "Your favourites,\n*all in one place*",
+      "fr": "Tes favoris,\n*tous au même endroit*"
+     },
+     "accent": "#FF1A1A",
+     "size": 0.038,
+     "weight": 800,
+     "transform": "none",
+     "tracking": -0.01,
+     "lineHeight": 1.04,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.082,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8,
+     "shadow": {
+      "y": 0.004,
+      "blur": 0.02,
+      "color": "rgba(0,0,0,0.6)"
+     }
+    },
+    {
+     "id": "ph-library",
+     "type": "sticker",
+     "src": {
+      "en": "phones/library_en.png",
+      "fr": "phones/library_fr.png"
+     },
+     "at": {
+      "x": 0.5,
+      "y": 0.635,
+      "w": 0.8027
+     },
+     "anchor": "center",
+     "z": 3,
+     "shadow": {
+      "y": 0.018,
+      "blur": 0.03,
+      "color": "rgba(0,0,0,0.75)"
+     }
+    },
+    {
+     "id": "cat-jump-0.84",
+     "type": "sticker",
+     "src": "cats/cat_jump.png",
+     "at": {
+      "x": 0.84,
+      "y": 0.3,
+      "w": 0.26
+     },
+     "anchor": "center",
+     "z": 7,
+     "rotate": -8,
+     "glow": {
+      "color": "rgba(255,0,0,0.45)",
+      "blur": 0.012
+     }
+    }
+   ]
+  },
+  {
+   "id": "03-lock",
+   "layers": [
+    {
+     "id": "bg",
+     "type": "background",
+     "gradient": {
+      "angle": 180,
+      "stops": [
+       "#1B0404",
+       "#0B0B0B",
+       "#060606"
+      ]
+     },
+     "glows": [
+      {
+       "x": 0.5,
+       "y": 0.0,
+       "r": 0.85,
+       "color": "rgba(255,0,0,0.42)"
+      },
+      {
+       "x": 0.5,
+       "y": 0.75,
+       "r": 0.8,
+       "color": "rgba(255,0,0,0.2)"
+      }
+     ],
+     "vignette": 0.3
+    },
+    {
+     "id": "paws",
+     "type": "scatter",
+     "items": [
+      "cats/paw.png"
+     ],
+     "size": 0.045,
+     "seed": 11,
+     "opacity": 0.13,
+     "jitter": 0.4,
+     "avoid": [
+      0.15,
+      0.25,
+      0.85,
+      1
+     ],
+     "z": 1,
+     "spots": [
+      {
+       "x": 0.08,
+       "y": 0.3
+      },
+      {
+       "x": 0.14,
+       "y": 0.36
+      },
+      {
+       "x": 0.09,
+       "y": 0.43
+      },
+      {
+       "x": 0.15,
+       "y": 0.49
+      },
+      {
+       "x": 0.88,
+       "y": 0.72
+      },
+      {
+       "x": 0.93,
+       "y": 0.78
+      },
+      {
+       "x": 0.87,
+       "y": 0.85
+      },
+      {
+       "x": 0.92,
+       "y": 0.91
+      }
+     ]
+    },
+    {
+     "id": "eyebrow",
+     "type": "eyebrow",
+     "content": {
+      "en": "Background play",
+      "fr": "Arrière-plan"
+     },
+     "color": "#FF1A1A",
+     "size": 0.021,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.052,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8
+    },
+    {
+     "id": "headline",
+     "type": "headline",
+     "content": {
+      "en": "Music keeps playing\n*screen locked*",
+      "fr": "La musique continue\n*écran verrouillé*"
+     },
+     "accent": "#FF1A1A",
+     "size": 0.038,
+     "weight": 800,
+     "transform": "none",
+     "tracking": -0.01,
+     "lineHeight": 1.04,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.082,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8,
+     "shadow": {
+      "y": 0.004,
+      "blur": 0.02,
+      "color": "rgba(0,0,0,0.6)"
+     }
+    },
+    {
+     "id": "ph-lock",
+     "type": "sticker",
+     "src": {
+      "en": "phones/lock_en.png",
+      "fr": "phones/lock_fr.png"
+     },
+     "at": {
+      "x": 0.5,
+      "y": 0.635,
+      "w": 0.7424
+     },
+     "anchor": "center",
+     "z": 3,
+     "shadow": {
+      "y": 0.018,
+      "blur": 0.03,
+      "color": "rgba(0,0,0,0.75)"
+     }
+    },
+    {
+     "id": "cat-sitdown-0.86",
+     "type": "sticker",
+     "src": "cats/cat_sitdown.png",
+     "at": {
+      "x": 0.86,
+      "y": 0.975,
+      "w": 0.15
+     },
+     "anchor": "bottom",
+     "z": 5,
+     "rotate": 0,
+     "glow": {
+      "color": "rgba(255,0,0,0.45)",
+      "blur": 0.012
+     }
+    }
+   ]
+  },
+  {
+   "id": "04-music",
+   "layers": [
+    {
+     "id": "bg",
+     "type": "background",
+     "gradient": {
+      "angle": 180,
+      "stops": [
+       "#1B0404",
+       "#0B0B0B",
+       "#060606"
+      ]
+     },
+     "glows": [
+      {
+       "x": 0.5,
+       "y": 0.0,
+       "r": 0.85,
+       "color": "rgba(255,0,0,0.42)"
+      },
+      {
+       "x": 0.5,
+       "y": 0.75,
+       "r": 0.8,
+       "color": "rgba(255,0,0,0.2)"
+      }
+     ],
+     "vignette": 0.3
+    },
+    {
+     "id": "paws",
+     "type": "scatter",
+     "items": [
+      "cats/paw.png"
+     ],
+     "size": 0.045,
+     "seed": 13,
+     "opacity": 0.13,
+     "jitter": 0.4,
+     "avoid": [
+      0.15,
+      0.25,
+      0.9,
+      1
+     ],
+     "z": 1,
+     "spots": [
+      {
+       "x": 0.08,
+       "y": 0.3
+      },
+      {
+       "x": 0.14,
+       "y": 0.36
+      },
+      {
+       "x": 0.09,
+       "y": 0.43
+      },
+      {
+       "x": 0.15,
+       "y": 0.49
+      },
+      {
+       "x": 0.88,
+       "y": 0.72
+      },
+      {
+       "x": 0.93,
+       "y": 0.78
+      },
+      {
+       "x": 0.87,
+       "y": 0.85
+      },
+      {
+       "x": 0.92,
+       "y": 0.91
+      }
+     ]
+    },
+    {
+     "id": "eyebrow",
+     "type": "eyebrow",
+     "content": {
+      "en": "Music",
+      "fr": "Musique"
+     },
+     "color": "#FF1A1A",
+     "size": 0.021,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.052,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8
+    },
+    {
+     "id": "headline",
+     "type": "headline",
+     "content": {
+      "en": "Your music,\n*zero ads*",
+      "fr": "Ta musique,\n*zéro pub*"
+     },
+     "accent": "#FF1A1A",
+     "size": 0.038,
+     "weight": 800,
+     "transform": "none",
+     "tracking": -0.01,
+     "lineHeight": 1.04,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.082,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8,
+     "shadow": {
+      "y": 0.004,
+      "blur": 0.02,
+      "color": "rgba(0,0,0,0.6)"
+     }
+    },
+    {
+     "id": "ph-music",
+     "type": "sticker",
+     "src": {
+      "en": "phones/music_en.png",
+      "fr": "phones/music_fr.png"
+     },
+     "at": {
+      "x": 0.56,
+      "y": 0.635,
+      "w": 0.7585
+     },
+     "anchor": "center",
+     "z": 3,
+     "shadow": {
+      "y": 0.018,
+      "blur": 0.03,
+      "color": "rgba(0,0,0,0.75)"
+     }
+    },
+    {
+     "id": "cat-walk-0.2",
+     "type": "sticker",
+     "src": "cats/cat_walk.png",
+     "at": {
+      "x": 0.2,
+      "y": 0.975,
+      "w": 0.24
+     },
+     "anchor": "bottom",
+     "z": 5,
+     "rotate": 0,
+     "glow": {
+      "color": "rgba(255,0,0,0.45)",
+      "blur": 0.012
+     }
+    }
+   ]
+  },
+  {
+   "id": "05-pip",
+   "layers": [
+    {
+     "id": "bg",
+     "type": "background",
+     "gradient": {
+      "angle": 180,
+      "stops": [
+       "#1B0404",
+       "#0B0B0B",
+       "#060606"
+      ]
+     },
+     "glows": [
+      {
+       "x": 0.5,
+       "y": 0.0,
+       "r": 0.85,
+       "color": "rgba(255,0,0,0.42)"
+      },
+      {
+       "x": 0.5,
+       "y": 0.75,
+       "r": 0.8,
+       "color": "rgba(255,0,0,0.2)"
+      }
+     ],
+     "vignette": 0.3
+    },
+    {
+     "id": "paws",
+     "type": "scatter",
+     "items": [
+      "cats/paw.png"
+     ],
+     "size": 0.045,
+     "seed": 17,
+     "opacity": 0.13,
+     "jitter": 0.4,
+     "avoid": [
+      0.15,
+      0.25,
+      0.85,
+      1
+     ],
+     "z": 1,
+     "spots": [
+      {
+       "x": 0.08,
+       "y": 0.3
+      },
+      {
+       "x": 0.14,
+       "y": 0.36
+      },
+      {
+       "x": 0.09,
+       "y": 0.43
+      },
+      {
+       "x": 0.15,
+       "y": 0.49
+      },
+      {
+       "x": 0.88,
+       "y": 0.72
+      },
+      {
+       "x": 0.93,
+       "y": 0.78
+      },
+      {
+       "x": 0.87,
+       "y": 0.85
+      },
+      {
+       "x": 0.92,
+       "y": 0.91
+      }
+     ]
+    },
+    {
+     "id": "eyebrow",
+     "type": "eyebrow",
+     "content": {
+      "en": "Picture in Picture",
+      "fr": "Image dans l'image"
+     },
+     "color": "#FF1A1A",
+     "size": 0.021,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.052,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8
+    },
+    {
+     "id": "headline",
+     "type": "headline",
+     "content": {
+      "en": "Keep watching in a\n*floating window*",
+      "fr": "Regarde en\n*fenêtre flottante*"
+     },
+     "accent": "#FF1A1A",
+     "size": 0.038,
+     "weight": 800,
+     "transform": "none",
+     "tracking": -0.01,
+     "lineHeight": 1.04,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.082,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8,
+     "shadow": {
+      "y": 0.004,
+      "blur": 0.02,
+      "color": "rgba(0,0,0,0.6)"
+     }
+    },
+    {
+     "id": "ph-pip",
+     "type": "sticker",
+     "src": {
+      "en": "phones/pip_en.png",
+      "fr": "phones/pip_fr.png"
+     },
+     "at": {
+      "x": 0.5,
+      "y": 0.635,
+      "w": 0.8075
+     },
+     "anchor": "center",
+     "z": 3,
+     "shadow": {
+      "y": 0.018,
+      "blur": 0.03,
+      "color": "rgba(0,0,0,0.75)"
+     }
+    },
+    {
+     "id": "cat-idle-0.15",
+     "type": "sticker",
+     "src": "cats/cat_idle.png",
+     "at": {
+      "x": 0.15,
+      "y": 0.975,
+      "w": 0.22
+     },
+     "anchor": "bottom",
+     "z": 5,
+     "rotate": 0,
+     "glow": {
+      "color": "rgba(255,0,0,0.45)",
+      "blur": 0.012
+     }
+    }
+   ]
+  },
+  {
+   "id": "06-noshorts",
+   "layers": [
+    {
+     "id": "bg",
+     "type": "background",
+     "gradient": {
+      "angle": 180,
+      "stops": [
+       "#1B0404",
+       "#0B0B0B",
+       "#060606"
+      ]
+     },
+     "glows": [
+      {
+       "x": 0.5,
+       "y": 0.0,
+       "r": 0.85,
+       "color": "rgba(255,0,0,0.42)"
+      },
+      {
+       "x": 0.5,
+       "y": 0.75,
+       "r": 0.8,
+       "color": "rgba(255,0,0,0.2)"
+      }
+     ],
+     "vignette": 0.3
+    },
+    {
+     "id": "paws",
+     "type": "scatter",
+     "items": [
+      "cats/paw.png"
+     ],
+     "size": 0.045,
+     "seed": 19,
+     "opacity": 0.13,
+     "jitter": 0.4,
+     "avoid": [
+      0.15,
+      0.25,
+      0.85,
+      1
+     ],
+     "z": 1,
+     "spots": [
+      {
+       "x": 0.08,
+       "y": 0.3
+      },
+      {
+       "x": 0.14,
+       "y": 0.36
+      },
+      {
+       "x": 0.09,
+       "y": 0.43
+      },
+      {
+       "x": 0.15,
+       "y": 0.49
+      },
+      {
+       "x": 0.88,
+       "y": 0.72
+      },
+      {
+       "x": 0.93,
+       "y": 0.78
+      },
+      {
+       "x": 0.87,
+       "y": 0.85
+      },
+      {
+       "x": 0.92,
+       "y": 0.91
+      }
+     ]
+    },
+    {
+     "id": "eyebrow",
+     "type": "eyebrow",
+     "content": {
+      "en": "No Shorts",
+      "fr": "Zéro Shorts"
+     },
+     "color": "#FF1A1A",
+     "size": 0.021,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.052,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8
+    },
+    {
+     "id": "headline",
+     "type": "headline",
+     "content": {
+      "en": "Your usual sites,\n*without Shorts*",
+      "fr": "Tes sites préférés,\n*sans les Shorts*"
+     },
+     "accent": "#FF1A1A",
+     "size": 0.038,
+     "weight": 800,
+     "transform": "none",
+     "tracking": -0.01,
+     "lineHeight": 1.04,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.082,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8,
+     "shadow": {
+      "y": 0.004,
+      "blur": 0.02,
+      "color": "rgba(0,0,0,0.6)"
+     }
+    },
+    {
+     "id": "ph-home",
+     "type": "sticker",
+     "src": {
+      "en": "phones/home_en.png",
+      "fr": "phones/home_fr.png"
+     },
+     "at": {
+      "x": 0.5,
+      "y": 0.635,
+      "w": 0.8391
+     },
+     "anchor": "center",
+     "z": 3,
+     "shadow": {
+      "y": 0.018,
+      "blur": 0.03,
+      "color": "rgba(0,0,0,0.75)"
+     }
+    },
+    {
+     "id": "cat-sitting-0.85",
+     "type": "sticker",
+     "src": "cats/cat_sitting.png",
+     "at": {
+      "x": 0.85,
+      "y": 0.975,
+      "w": 0.14
+     },
+     "anchor": "bottom",
+     "z": 5,
+     "rotate": 0,
+     "glow": {
+      "color": "rgba(255,0,0,0.45)",
+      "blur": 0.012
+     }
+    }
+   ]
+  },
+  {
+   "id": "07-browse",
+   "layers": [
+    {
+     "id": "bg",
+     "type": "background",
+     "gradient": {
+      "angle": 180,
+      "stops": [
+       "#1B0404",
+       "#0B0B0B",
+       "#060606"
+      ]
+     },
+     "glows": [
+      {
+       "x": 0.5,
+       "y": 0.0,
+       "r": 0.85,
+       "color": "rgba(255,0,0,0.42)"
+      },
+      {
+       "x": 0.5,
+       "y": 0.75,
+       "r": 0.8,
+       "color": "rgba(255,0,0,0.2)"
+      }
+     ],
+     "vignette": 0.3
+    },
+    {
+     "id": "paws",
+     "type": "scatter",
+     "items": [
+      "cats/paw.png"
+     ],
+     "size": 0.045,
+     "seed": 23,
+     "opacity": 0.13,
+     "jitter": 0.4,
+     "avoid": [
+      0.15,
+      0.25,
+      0.85,
+      1
+     ],
+     "z": 1,
+     "spots": [
+      {
+       "x": 0.08,
+       "y": 0.3
+      },
+      {
+       "x": 0.14,
+       "y": 0.36
+      },
+      {
+       "x": 0.09,
+       "y": 0.43
+      },
+      {
+       "x": 0.15,
+       "y": 0.49
+      },
+      {
+       "x": 0.88,
+       "y": 0.72
+      },
+      {
+       "x": 0.93,
+       "y": 0.78
+      },
+      {
+       "x": 0.87,
+       "y": 0.85
+      },
+      {
+       "x": 0.92,
+       "y": 0.91
+      }
+     ]
+    },
+    {
+     "id": "eyebrow",
+     "type": "eyebrow",
+     "content": {
+      "en": "While you browse",
+      "fr": "Pendant que tu navigues"
+     },
+     "color": "#FF1A1A",
+     "size": 0.021,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.052,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8
+    },
+    {
+     "id": "headline",
+     "type": "headline",
+     "content": {
+      "en": "Keep the music on\n*while you browse*",
+      "fr": "Ta musique continue\n*quand tu navigues*"
+     },
+     "accent": "#FF1A1A",
+     "size": 0.038,
+     "weight": 800,
+     "transform": "none",
+     "tracking": -0.01,
+     "lineHeight": 1.04,
+     "align": "center",
+     "at": {
+      "x": 0.5,
+      "y": 0.082,
+      "w": 0.9
+     },
+     "anchor": "top",
+     "z": 8,
+     "shadow": {
+      "y": 0.004,
+      "blur": 0.02,
+      "color": "rgba(0,0,0,0.6)"
+     }
+    },
+    {
+     "id": "ph-browse",
+     "type": "sticker",
+     "src": {
+      "en": "phones/browse_en.png",
+      "fr": "phones/browse_fr.png"
+     },
+     "at": {
+      "x": 0.5,
+      "y": 0.635,
+      "w": 0.6988
+     },
+     "anchor": "center",
+     "z": 3,
+     "shadow": {
+      "y": 0.018,
+      "blur": 0.03,
+      "color": "rgba(0,0,0,0.75)"
+     }
+    },
+    {
+     "id": "cat-walk-0.82",
+     "type": "sticker",
+     "src": "cats/cat_walk.png",
+     "at": {
+      "x": 0.82,
+      "y": 0.975,
+      "w": 0.22
+     },
+     "anchor": "bottom",
+     "z": 5,
+     "rotate": 0,
+     "glow": {
+      "color": "rgba(255,0,0,0.45)",
+      "blur": 0.012
+     },
+     "flip": true
+    }
+   ]
+  }
+ ]
+}

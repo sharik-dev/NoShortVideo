@@ -18,10 +18,7 @@ struct SessionGaugeView: View {
     @State private var isExpanded = true
 
     // Shared drag state — applies to both expanded and collapsed views
-    @State     private var gaugeOffset: CGSize  = .zero
-    @GestureState private var gaugeDrag: CGSize = .zero
-    // Guards tap-to-toggle from firing at the end of a drag
-    @State private var gaugeDragActive: Bool    = false
+    @State private var gaugeOffset: CGSize = .zero
 
     var body: some View {
         Group {
@@ -31,19 +28,10 @@ struct SessionGaugeView: View {
                 collapsedPill
             }
         }
-        // Single shared offset + drag for both states
-        .offset(x: gaugeOffset.width  + gaugeDrag.width,
-                y: gaugeOffset.height + gaugeDrag.height)
-        .gesture(
-            DragGesture(minimumDistance: 4)
-                .onChanged { _ in gaugeDragActive = true }
-                .updating($gaugeDrag) { v, s, _ in s = v.translation }
-                .onEnded { v in
-                    gaugeOffset.width  += v.translation.width
-                    gaugeOffset.height += v.translation.height
-                    DispatchQueue.main.async { gaugeDragActive = false }
-                }
-        )
+        // Single shared offset + drag for both states; a tap toggles
+        .floatingDrag(offset: $gaugeOffset) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { isExpanded.toggle() }
+        }
         .animation(.spring(response: 0.4, dampingFraction: 0.75), value: isExpanded)
     }
 
@@ -79,10 +67,6 @@ struct SessionGaugeView: View {
         .frame(width: 34)
         .background(glassBackground(Capsule()))
         .transition(.scale(scale: 0.5).combined(with: .opacity))
-        .onTapGesture {
-            guard !gaugeDragActive else { return }
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { isExpanded = false }
-        }
     }
 
     // MARK: - Collapsed
@@ -102,10 +86,6 @@ struct SessionGaugeView: View {
         .frame(width: 36, height: 36)
         .shadow(color: gaugeColor.opacity(0.5), radius: 8, x: 2)
         .transition(.scale(scale: 0.5).combined(with: .opacity))
-        .onTapGesture {
-            guard !gaugeDragActive else { return }
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) { isExpanded = true }
-        }
     }
 
     // MARK: - Helpers

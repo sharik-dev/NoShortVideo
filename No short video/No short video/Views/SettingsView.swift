@@ -18,6 +18,7 @@ struct SettingsView: View {
     @AppStorage("grayscaleMode")        private var grayscaleMode: Bool     = false
     @AppStorage("adBlockEnabled")       private var adBlockEnabled: Bool    = true
     @AppStorage("appLanguage")          private var lang: String            = "en"
+    @AppStorage(HomeCatView.enabledKey) private var catEnabled: Bool        = true
 
     @Environment(\.dismiss) private var dismiss
 
@@ -34,6 +35,25 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 } header: {
                     Text(t("Langue", "Language"))
+                }
+
+                // ── Compagnon ──
+                Section {
+                    Toggle(isOn: $catEnabled) {
+                        Label(t("Chat sur l'accueil", "Cat on the home screen"),
+                              systemImage: "cat.fill")
+                    }
+                } header: {
+                    Text(t("Compagnon", "Companion"))
+                } footer: {
+                    Text(t(
+                        "Il s'endort de plus en plus à mesure que tu approches ta limite du jour.",
+                        "It gets sleepier as you get closer to your daily limit."
+                    ))
+                    + Text(verbatim: "\n\n")
+                    // Crédit exigé par la licence CC BY du modèle 3D.
+                    + Text(t("Chat : « Somali Cat Animated » par DreamNoms (CC BY 4.0).",
+                             "Cat: “Somali Cat Animated” by DreamNoms (CC BY 4.0)."))
                 }
 
                 // ── Concentration ──

@@ -55,6 +55,8 @@ final class SiteWebViewModel: ObservableObject {
         contentController.addUserScript(AppBannerService.userScript())
         contentController.addUserScript(CookieConsentService.userScript())
         contentController.addUserScript(SSOLoginService.userScript())
+        // La musique passe avant les vidéos du fil (cf. MusicPriorityService).
+        contentController.addUserScript(MusicPriorityService.userScript())
         if UIDevice.current.userInterfaceIdiom == .phone {
             contentController.addUserScript(
                 WKUserScript(source: ScriptInjectionService.bottomMarginScript,
@@ -88,7 +90,11 @@ final class SiteWebViewModel: ObservableObject {
         AdBlockService.apply(to: webView)
 
         navDelegate.onDidFinish = { [weak self] in
-            self?.isReady = true
+            guard let self else { return }
+            self.isReady = true
+            // Page neuve : le script repart muet par défaut, on lui redit
+            // si la musique joue.
+            if self.mutesForMusic { self.applyMusicMute() }
         }
 
         // La barre d'outils lit `canGoBack` / `canGoForward` depuis l'état :
@@ -140,6 +146,21 @@ final class SiteWebViewModel: ObservableObject {
                                    completionHandler: nil)
     }
 
+    /// Une musique joue : les vidéos de ce compartiment restent muettes pour
+    /// ne pas la couper (cf. `MusicPriorityService`).
+    var mutesForMusic = false {
+        didSet {
+            guard mutesForMusic != oldValue else { return }
+            applyMusicMute()
+        }
+    }
+
+    private func applyMusicMute() {
+        guard hasContent else { return }
+        webView.evaluateJavaScript(MusicPriorityService.setMutedScript(mutesForMusic),
+                                   completionHandler: nil)
+    }
+
     /// Marge basse pour la barre d'outils, comme sur la webview YouTube.
     func setBottomMargin(visible: Bool) {
         guard hasContent else { return }
@@ -166,6 +187,7 @@ final class SiteSessions: ObservableObject {
     func session(for kind: SiteKind) -> SiteWebViewModel {
         if let existing = sessions[kind] { return existing }
         let created = SiteWebViewModel(site: kind)
+        created.mutesForMusic = mutesForMusic
         created.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.objectWillChange.send() }
@@ -182,6 +204,12 @@ final class SiteSessions: ObservableObject {
         for (siteKind, session) in sessions where siteKind != kind {
             session.pauseMedia()
         }
+    }
+
+    /// Silence imposé aux vidéos de tous les compartiments, y compris ceux
+    /// créés ensuite, tant qu'une musique joue.
+    var mutesForMusic = false {
+        didSet { sessions.values.forEach { $0.mutesForMusic = mutesForMusic } }
     }
 
     func setBottomMargin(visible: Bool) {

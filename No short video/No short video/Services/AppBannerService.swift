@@ -79,8 +79,28 @@ enum AppBannerService {
             'installer l application', 'passer a l application', 'passer a l app',
             'ouvrir x', 'ouvrir dans x', 'voir dans l app', 'utiliser l app',
             'ouvrir linkedin', 'ouvrir dans linkedin', 'utiliser l appli',
-            'utiliser l application linkedin'
+            'utiliser l application linkedin',
+            // Formes courtes : « Ouvrir app » (YouTube), « Ouvrir l'appli »,
+            // « Obtenez l'appli » (LinkedIn).
+            'ouvrir app', 'ouvrir appli', 'ouvrir l appli', 'ouvrir dans l appli',
+            'voir dans l appli', 'obtenir l appli', 'obtenez l appli',
+            'telecharger l appli', 'installer l appli', 'essayer l appli',
+            'passer a l appli', 'continuer dans l appli', 'get the app now'
         ];
+
+        // Même intention, tournures qu'aucune liste ne couvrira toutes :
+        // un verbe d'ouverture + « app / appli / application » ou le nom du site.
+        var PROMPT_PATTERN = new RegExp(
+            '^(open|use|get|try|view|see|continue|switch|ouvrir|ouvrez|utiliser|' +
+            'utilisez|obtenir|obtenez|telecharger|telechargez|installer|installez|' +
+            'essayer|essayez|voir|continuer|passer)' +
+            '( (it|in|on|to|dans|sur|a|avec))?( (the|l|la|le|notre|our))? ' +
+            '(app|appli|application|youtube|linkedin|instagram|twitch)( now| maintenant)?$'
+        );
+
+        // Le lien trahit le bouton mieux que son texte : il ouvre l'app native
+        // (schéma `vnd.youtube:`, `linkedin:`…) ou porte une campagne « open app ».
+        var APP_HREF = /^(vnd\\.youtube|youtube|linkedin|voyager|instagram|twitter|twitch|intent):|open_?app|app_?upsell|redirect_app_store|apps\\.apple\\.com|itunes\\.apple\\.com/i;
 
         function normalize(value) {
             return (value || '')
@@ -100,7 +120,9 @@ enum AppBannerService {
             // Un post X ou une vignette YouTube n'est jamais un bandeau.
             if ((platform === 'youtube' || platform === 'x') && el.closest('article')) return false;
             var href = el.getAttribute('href') || '';
+            if (APP_HREF.test(href)) return true;
             if (/\\/(watch|shorts|status)\\b/.test(href)) return false;
+            if (PROMPT_PATTERN.test(text)) return true;
             for (var i = 0; i < PHRASES.length; i++) {
                 var phrase = PHRASES[i];
                 var at = (' ' + text + ' ').indexOf(' ' + phrase + ' ');
@@ -190,7 +212,32 @@ enum AppBannerService {
             if (smart) smart.remove();
         }
 
+        // Feuille de style permanente pour les boutons reconnaissables à leur
+        // lien : elle tient même quand le site re-rend son en-tête sans
+        // ajouter de nœud (le MutationObserver ne voit alors rien passer).
+        var CSS = {
+            youtube: 'ytm-button-renderer:has(> a[href^="vnd.youtube:"]),' +
+                     'ytm-button-renderer:has(> a[href*="open_app"]),' +
+                     'a[href^="vnd.youtube:"], a[href*="mweb_c3_open_app"]' +
+                     '{ display: none !important; }',
+            linkedin: 'a[href^="linkedin:"], a[href^="voyager:"],' +
+                      'a[href*="app_upsell"], a[href*="open_app"],' +
+                      '[data-tracking-control-name*="app_upsell"],' +
+                      '[data-tracking-control-name*="open_app"],' +
+                      '[data-test-id*="app-banner"], [data-test-id*="app-upsell"]' +
+                      '{ display: none !important; }'
+        }[platform];
+
+        function ensureStyle() {
+            if (!CSS || document.getElementById('nsv-app-banner-style')) return;
+            var style = document.createElement('style');
+            style.id = 'nsv-app-banner-style';
+            style.textContent = CSS;
+            (document.head || document.documentElement).appendChild(style);
+        }
+
         function apply() {
+            ensureStyle();
             if (!document.body) return;
             hideKnownContainers();
             hideByButtonText();

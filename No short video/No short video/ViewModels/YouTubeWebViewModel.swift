@@ -30,7 +30,10 @@ final class YouTubeWebViewModel: ObservableObject {
     private let navigationDelegate: WebViewNavigationDelegate
     private let storage = VideoStorageService.shared
     private var trackingTimer: Timer?
+    private var trackingTick = 0
     private var pendingSeekTime: Double?
+    /// Reprendre la lecture après le seek, ou rester en pause comme avant.
+    private var pendingSeekPlays = true
     private var urlObservation: NSKeyValueObservation?
     private var sessionTimer: Timer?
     private var sessionStartTime: Date?
@@ -59,6 +62,9 @@ final class YouTubeWebViewModel: ObservableObject {
         contentController.addUserScript(AppBannerService.userScript())
         contentController.addUserScript(CookieConsentService.userScript())
         contentController.addUserScript(SSOLoginService.userScript())
+        #if DEBUG
+        if let capture = CaptureScriptService.userScript() { contentController.addUserScript(capture) }
+        #endif
         configuration.userContentController = contentController
 
         // Pas d'identité Safari globale ici : elle n'est posée que sur les
@@ -96,6 +102,12 @@ final class YouTubeWebViewModel: ObservableObject {
         // Bloqueur de pub : compilé une fois, appliqué au moteur avant toute
         // requête (cf. AdBlockService).
         AdBlockService.apply(to: webView)
+
+        // Rendu tué par iOS (fréquent après un long passage en arrière-plan) :
+        // on recharge en reprenant la vidéo au lieu de repartir de zéro.
+        navDelegate.onWebContentProcessTerminated = { [weak self] _ in
+            self?.reloadResumingPlayback(reason: "process terminated")
+        }
 
         // Hook seek-on-load for video resume
         self.navigationDelegate.onDidFinish = { [weak self] in
@@ -159,33 +171,45 @@ final class YouTubeWebViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard self?.isPanelActive == true else { return }
-            self?.webView.evaluateJavaScript(
+            // Seulement si une vidéo jouait vraiment. Sinon on relançait le
+            // premier <video> venu — un aperçu muet de l'accueil — qui volait
+            // l'audio à YouTube Music ou au MP3 hors ligne et coupait la
+            // musique dès le passage en arrière-plan.
+            guard let self, self.wasPlayingVideo,
+                  !OfflineMusicPlayer.shared.isPlaying else { return }
+            self.webView.evaluateJavaScript(
                 "var v=document.querySelector('video'); if(v&&v.paused) v.play();",
                 completionHandler: nil
             )
         }
 
-        // When an audio session interruption ends (e.g. phone call finished),
-        // re-activate the session and resume playback automatically.
+        // Retour au premier plan : le lecteur a parfois perdu son flux pendant
+        // la suspension et tourne dans le vide. Le chien de garde est plus
+        // prompt dans les secondes qui suivent (cf. `watchPlayback`).
         NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
+            forName: UIApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            guard
-                let info = notification.userInfo,
-                let typeVal = info[AVAudioSessionInterruptionTypeKey] as? UInt,
-                let type = AVAudioSession.InterruptionType(rawValue: typeVal),
-                type == .ended
-            else { return }
-            guard self?.isPanelActive == true else { return }
-            try? AVAudioSession.sharedInstance().setActive(true)
-            self?.webView.evaluateJavaScript(
-                "var v=document.querySelector('video'); if(v&&v.paused) v.play();",
-                completionHandler: nil
-            )
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.foregroundReturnAt = Date()
+            self.stallSeconds = 0
+            self.lastProbeTime = nil
         }
+
+        // Une autre app coupe le son (appel, pub avec du son…) : la vidéo
+        // repart quand elle se tait, si elle jouait avant et que YouTube est
+        // bien le compartiment affiché.
+        interruptionMonitor = AudioInterruptionMonitor(
+            isPlaying: { [weak self] in self?.wasPlayingVideo ?? false },
+            resume: { [weak self] in
+                guard let self, self.isPanelActive else { return }
+                self.webView.evaluateJavaScript(
+                    "var v=document.querySelector('video'); if(v&&v.paused&&!v.ended) v.play();",
+                    completionHandler: nil
+                )
+            }
+        )
     }
 
     deinit {
@@ -209,8 +233,20 @@ final class YouTubeWebViewModel: ObservableObject {
         webView.goForward()
     }
 
+    /// Actualiser : sur une vidéo, on repart de la seconde en cours au lieu
+    /// du début — `webView.reload()` rechargeait l'URL sans position.
     func reload() {
-        webView.reload()
+        guard webViewState.isOnVideoPage, !webViewState.currentVideoId.isEmpty else {
+            webView.reload()
+            return
+        }
+        webView.evaluateJavaScript(ScriptInjectionService.playbackProbeScript) { [weak self] result, _ in
+            guard let self else { return }
+            if let probe = PlaybackProbe(result), probe.hasVideo, !probe.isAd, probe.time > 0 {
+                self.lastPlayback = (self.webViewState.currentVideoId, probe.time, !probe.paused)
+            }
+            self.reloadResumingPlayback(reason: "manual")
+        }
     }
 
     func goHome() {
@@ -339,6 +375,7 @@ final class YouTubeWebViewModel: ObservableObject {
 
                 DispatchQueue.main.async {
                     self.showSavedFeedback = true
+                    ReviewPromptService.shared.recordSuccess()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                         self.showSavedFeedback = false
                     }
@@ -438,11 +475,15 @@ final class YouTubeWebViewModel: ObservableObject {
     func performPendingSeek() {
         guard let seekTime = pendingSeekTime, seekTime > 0 else { return }
         pendingSeekTime = nil
+        let plays = pendingSeekPlays
+        pendingSeekPlays = true
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+        // Le script attend lui-même que le lecteur soit monté : inutile de
+        // patienter ici plus que le temps que YouTube démarre son JS.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self else { return }
             self.webView.evaluateJavaScript(
-                ScriptInjectionService.seekScript(to: seekTime),
+                ScriptInjectionService.resumeScript(to: seekTime, play: plays),
                 completionHandler: nil
             )
             // Restore loop state on the new video
@@ -567,8 +608,16 @@ final class YouTubeWebViewModel: ObservableObject {
 
     private func startTracking() {
         trackingTimer?.invalidate()
-        trackingTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            self?.trackProgress()
+        stallSeconds = 0
+        lastProbeTime = nil
+        trackingTick = 0
+        trackingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.watchPlayback()
+            // La bibliothèque n'a pas besoin de la seconde près : on n'y écrit
+            // qu'une fois sur cinq.
+            self.trackingTick += 1
+            if self.trackingTick % 5 == 0 { self.trackProgress() }
         }
     }
 
@@ -601,5 +650,160 @@ final class YouTubeWebViewModel: ObservableObject {
                 self.storage.save(video)
             }
         }
+    }
+
+    // MARK: - Chien de garde de lecture
+
+    /// Dernière position vue en lecture normale (hors pub) : c'est là qu'on
+    /// reprend après un rechargement.
+    private var lastPlayback: (videoId: String, time: Double, playing: Bool)?
+
+    /// La vidéo de la page jouait au dernier relevé, dans le compartiment
+    /// affiché : c'est la seule qu'on a le droit de relancer.
+    private var wasPlayingVideo: Bool {
+        guard isPanelActive, webViewState.isOnVideoPage,
+              let snap = lastPlayback,
+              snap.videoId == webViewState.currentVideoId
+        else { return false }
+        return snap.playing
+    }
+    private var interruptionMonitor: AudioInterruptionMonitor?
+    private var lastProbeTime: Double?
+    /// Secondes consécutives où le lecteur devait avancer et n'a pas bougé.
+    private var stallSeconds = 0
+    private var foregroundReturnAt: Date?
+    private var lastAutoReloadAt: Date?
+    /// Rechargements automatiques d'affilée sans que la lecture reparte —
+    /// au-delà, on laisse la main : recharger ne résout pas un réseau mort.
+    private var autoReloadStreak = 0
+
+    /// Juste après un retour au premier plan, une roue qui tourne est presque
+    /// toujours un flux perdu pendant la suspension : on réagit vite. Le reste
+    /// du temps ce peut être un vrai buffering réseau, on laisse plus de marge.
+    private static let stallLimitAfterForeground = 4
+    private static let stallLimit = 10
+    private static let foregroundWindow: TimeInterval = 20
+    private static let autoReloadCooldown: TimeInterval = 15
+    private static let maxAutoReloadStreak = 3
+
+    private struct PlaybackProbe {
+        let hasVideo: Bool
+        let time: Double
+        let paused: Bool
+        let ended: Bool
+        let readyState: Int
+        let isAd: Bool
+
+        init?(_ result: Any?) {
+            guard let json = result as? String,
+                  let data = json.data(using: .utf8),
+                  let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+            hasVideo   = info["has"] as? Bool ?? false
+            time       = info["t"] as? Double ?? 0
+            paused     = info["paused"] as? Bool ?? true
+            ended      = info["ended"] as? Bool ?? false
+            readyState = info["rs"] as? Int ?? 0
+            isAd       = info["ad"] as? Bool ?? false
+        }
+    }
+
+    /// Relevé chaque seconde sur une page vidéo : mémorise la position, et
+    /// recharge en reprenant à cette position si le lecteur reste bloqué.
+    private func watchPlayback() {
+        let videoId = webViewState.currentVideoId
+        guard webViewState.isOnVideoPage, !videoId.isEmpty else { return }
+
+        webView.evaluateJavaScript(ScriptInjectionService.playbackProbeScript) { [weak self] result, error in
+            guard let self, self.webViewState.currentVideoId == videoId else { return }
+            let probe = PlaybackProbe(result)
+
+            if let probe, probe.hasVideo, !probe.isAd {
+                let advanced = self.lastProbeTime.map { abs(probe.time - $0) > 0.2 } ?? false
+                self.lastProbeTime = probe.time
+                if probe.time > 0 {
+                    self.lastPlayback = (videoId, probe.time, !probe.paused)
+                }
+                if advanced {
+                    self.stallSeconds = 0
+                    self.autoReloadStreak = 0
+                    return
+                }
+            }
+
+            // En arrière-plan, pendant un chargement ou quand YouTube n'est pas
+            // à l'écran, on se contente de noter la position.
+            guard UIApplication.shared.applicationState == .active,
+                  self.isPanelActive, !self.isBlocked,
+                  !self.webViewState.isLoading
+            else { self.stallSeconds = 0; return }
+
+            let justReturned = self.foregroundReturnAt.map {
+                Date().timeIntervalSince($0) < Self.foregroundWindow
+            } ?? false
+
+            if self.isStalled(probe, error: error, justReturned: justReturned) {
+                self.stallSeconds += 1
+            } else {
+                self.stallSeconds = 0
+            }
+
+            let limit = justReturned ? Self.stallLimitAfterForeground : Self.stallLimit
+            guard self.stallSeconds >= limit,
+                  self.autoReloadStreak < Self.maxAutoReloadStreak,
+                  self.lastAutoReloadAt.map({ Date().timeIntervalSince($0) > Self.autoReloadCooldown }) ?? true
+            else { return }
+
+            self.autoReloadStreak += 1
+            self.lastAutoReloadAt = Date()
+            self.reloadResumingPlayback(reason: "stalled \(self.stallSeconds)s")
+        }
+    }
+
+    /// Le lecteur devrait avancer et n'avance pas.
+    private func isStalled(_ probe: PlaybackProbe?, error: Error?, justReturned: Bool) -> Bool {
+        // Le JS ne répond plus : le rendu est figé.
+        guard let probe else { return error != nil || justReturned }
+        if probe.isAd || probe.ended { return false }
+        // Page vidéo sans lecteur : il a été démonté pendant la suspension.
+        guard probe.hasVideo else { return justReturned }
+        // Lecture demandée mais rien en mémoire tampon : la roue qui tourne.
+        if !probe.paused { return probe.readyState < 3 }
+        // En pause avec un lecteur vidé (flux perdu) : seulement juste après
+        // un retour, sinon c'est une pause voulue.
+        return justReturned && probe.readyState == 0 && (lastPlayback?.playing ?? false)
+    }
+
+    /// Recharge la page vidéo et reprend à la dernière position connue.
+    ///
+    /// La position part aussi dans l'URL (`t=`), que YouTube applique de
+    /// lui-même dès le chargement ; `resumeScript` affine à la seconde près.
+    private func reloadResumingPlayback(reason: String) {
+        let videoId = webViewState.currentVideoId
+        guard let url = webView.url ?? webViewState.currentURL else {
+            webView.reload()
+            return
+        }
+        guard !videoId.isEmpty,
+              let snap = lastPlayback, snap.videoId == videoId, snap.time > 1,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else {
+            webView.load(URLRequest(url: url))
+            return
+        }
+
+        var items = (components.queryItems ?? []).filter { $0.name != "t" && $0.name != "start" }
+        items.append(URLQueryItem(name: "t", value: "\(Int(snap.time))s"))
+        components.queryItems = items
+
+        #if DEBUG
+        print("[Playback] reload (\(reason)) → \(videoId) @ \(Int(snap.time))s")
+        #endif
+
+        pendingSeekTime = snap.time
+        pendingSeekPlays = snap.playing
+        stallSeconds = 0
+        lastProbeTime = nil
+        webView.load(URLRequest(url: components.url ?? url))
     }
 }

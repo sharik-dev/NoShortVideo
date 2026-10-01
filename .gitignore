@@ -5,3 +5,9 @@
 .derivedData/
 DerivedData/
 xcuserdata/
+.derivedData-release/
+
+# Captures : régénérables (prep.py, build_catify.py)
+store-screenshots/build/
+onboarding-captures/catify.js
+onboarding-captures/v.png

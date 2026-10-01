@@ -38,6 +38,7 @@ final class MusicWebViewModel: ObservableObject {
     let webView: WKWebView
 
     private var pollTimer: Timer?
+    private var interruptionMonitor: AudioInterruptionMonitor?
     private static let homeURL = URL(string: "https://music.youtube.com")!
 
     // MARK: - Init
@@ -57,6 +58,9 @@ final class MusicWebViewModel: ObservableObject {
         // qu'on évite.
         contentController.addUserScript(AppBannerService.userScript())
         contentController.addUserScript(CookieConsentService.userScript())
+        #if DEBUG
+        if let capture = CaptureScriptService.userScript() { contentController.addUserScript(capture) }
+        #endif
 
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = contentController
@@ -86,9 +90,55 @@ final class MusicWebViewModel: ObservableObject {
         // impossible à bloquer sans couper la lecture — et il coûtait cher :
         // écran noir au lancement de la session musicale. Cette webview reste
         // exactement telle qu'elle était.
+
+        // Une pub dans une autre app coupe le morceau : il repart dès qu'elle
+        // se tait. `isPlaying` date du dernier relevé (2 s), donc d'avant la
+        // coupure — c'est justement l'état qu'on veut retrouver.
+        interruptionMonitor = AudioInterruptionMonitor(
+            isPlaying: { [weak self] in
+                guard let self else { return false }
+                return self.hasSession && !self.isSuspended && self.isPlaying
+            },
+            resume: { [weak self] in
+                guard let self, self.hasSession, !self.isSuspended else { return }
+                self.webView.evaluateJavaScript(Self.resumeIfPausedJS) { [weak self] _, _ in
+                    self?.refreshState()
+                }
+            }
+        )
+        observeBackground()
     }
 
-    deinit { pollTimer?.invalidate() }
+    deinit {
+        pollTimer?.invalidate()
+        if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
+    }
+
+    private var backgroundObserver: NSObjectProtocol?
+
+    /// WebKit met la vidéo en pause au passage en arrière-plan, masquer la
+    /// visibilité de la page (`backgroundAudioScript`) n'y change rien. Si un
+    /// morceau jouait, on le relance aussitôt — plusieurs fois, la première
+    /// tentative arrive parfois avant la pause. Sans effet sur un lecteur qui
+    /// joue déjà.
+    private func observeBackground() {
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.hasSession, !self.isSuspended, self.isPlaying,
+                  !OfflineMusicPlayer.shared.isPlaying else { return }
+            for delay in [0, 0.5, 1.5] as [TimeInterval] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self, self.hasSession, !self.isSuspended else { return }
+                    self.webView.evaluateJavaScript(Self.resumeIfPausedJS) { [weak self] _, _ in
+                        self?.refreshState()
+                    }
+                }
+            }
+        }
+    }
 
     // MARK: - Session
 
@@ -219,7 +269,10 @@ final class MusicWebViewModel: ObservableObject {
             self.storage.save(track)
 
             DispatchQueue.main.async {
+                // Téléchargé en MP3 dans cinq minutes, en silence.
+                VideoDownloadService.shared.downloadDueFavorites()
                 self.showSavedFeedback = true
+                ReviewPromptService.shared.recordSuccess()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
                     self.showSavedFeedback = false
                 }
@@ -297,6 +350,11 @@ final class MusicWebViewModel: ObservableObject {
 
     // Exposées ici plutôt que d'ouvrir la WKWebView à la barre d'outils : une
     // vue SwiftUI n'a pas à importer WebKit pour appuyer sur « retour ».
+    #if DEBUG
+    /// Captures de l'onboarding : ouvrir un morceau précis (`-debugOpenURL`).
+    func debugLoad(_ url: URL) { webView.load(URLRequest(url: url)) }
+    #endif
+
     func goBack()    { webView.goBack() }
     func goForward() { webView.goForward() }
     func reload()    { webView.reload() }
@@ -318,6 +376,7 @@ final class MusicWebViewModel: ObservableObject {
             return
         }
 
+        if isPlaying { interruptionMonitor?.cancelPendingResume() }
         webView.evaluateJavaScript(isPlaying ? Self.pauseJS : Self.playJS) { [weak self] _, _ in
             self?.refreshState()
         }
@@ -327,6 +386,9 @@ final class MusicWebViewModel: ObservableObject {
     /// On met en pause sans abandonner la session : la bannière reste, et un
     /// appui sur lecture reprend le morceau où il en était.
     func pauseForVideo() {
+        // La vidéo a pris la place : la fin d'une coupure ne doit pas relancer
+        // la musique par-dessus.
+        interruptionMonitor?.cancelPendingResume()
         guard hasSession, isPlaying else { return }
         webView.evaluateJavaScript(Self.pauseJS) { [weak self] _, _ in
             self?.refreshState()
@@ -375,6 +437,9 @@ final class MusicWebViewModel: ObservableObject {
 
     private static let playJS  = "var v=document.querySelector('video'); if(v) v.play();"
     private static let pauseJS = "var v=document.querySelector('video'); if(v) v.pause();"
+    /// Sans effet si ça joue déjà : les relances après coupure peuvent s'empiler.
+    private static let resumeIfPausedJS =
+        "var v=document.querySelector('video'); if(v&&v.paused&&!v.ended){var r=v.play(); if(r&&r.catch) r.catch(function(){});}"
 
     /// Tout ce qu'il faut pour enregistrer un morceau. L'identifiant vient de
     /// l'URL `watch?v=`, la seule source fiable sur YouTube Music.

@@ -21,9 +21,7 @@ struct LibraryView: View {
     private let emptyTitle: (fr: String, en: String)
     private let emptyHint: (fr: String, en: String)
     private let emptyIcon: String
-    /// Petit bouton ⬇︎ sur chaque ligne pour télécharger le favori en local.
-    /// Vidéos YouTube seulement : la bibliothèque musicale n'en a pas.
-    private let allowsDownload: Bool
+    /// `.mp3` : bibliothèque musicale, dont les morceaux se jouent sur place.
     private let downloadFormat: DownloadFormat
     private let onOpen: (SavedVideo) -> Void
 
@@ -38,7 +36,6 @@ struct LibraryView: View {
             "Tap the bookmark icon while watching\na video to save it here."
         ),
         emptyIcon: String = "bookmark.slash",
-        allowsDownload: Bool = false,
         downloadFormat: DownloadFormat = .mp4,
         onOpen: @escaping (SavedVideo) -> Void
     ) {
@@ -49,7 +46,6 @@ struct LibraryView: View {
         self.emptyTitle = emptyTitle
         self.emptyHint = emptyHint
         self.emptyIcon = emptyIcon
-        self.allowsDownload = allowsDownload
         self.downloadFormat = downloadFormat
         self.onOpen = onOpen
     }
@@ -60,6 +56,13 @@ struct LibraryView: View {
     @State private var showNewFolderAlert: Bool = false
     @State private var newFolderName: String = ""
     @State private var folderTargetVideoId: String? = nil
+    /// Lecteur plein écran des MP3 (bibliothèque musicale).
+    @State private var showMusicPlayer = false
+    @ObservedObject private var musicPlayer = OfflineMusicPlayer.shared
+
+    /// Bibliothèque musicale : un MP3 téléchargé se joue ici même, dans le
+    /// lecteur façon Spotify, sans fermer la liste.
+    private var playsMusicInline: Bool { downloadFormat == .mp3 }
 
     private func t(_ fr: String, _ en: String) -> String { lang == "fr" ? fr : en }
 
@@ -84,6 +87,13 @@ struct LibraryView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if playsMusicInline {
+                    MusicMiniBar { showMusicPlayer = true }
+                        .padding(.bottom, 4)
+                        .animation(.spring(response: 0.35), value: musicPlayer.current?.id)
+                }
+            }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -100,6 +110,9 @@ struct LibraryView: View {
                 Text(t("Donnez un nom à votre dossier.", "Give your folder a name."))
             }
         }
+        .fullScreenCover(isPresented: $showMusicPlayer) {
+            MusicPlayerView()
+        }
         .onAppear { libraryVM.load() }
         // Un téléchargement qui se termine pendant qu'on regarde la liste :
         // la ligne prend son badge « Hors ligne » sans avoir à rouvrir.
@@ -108,6 +121,11 @@ struct LibraryView: View {
         // recrée l'abonnement à chaque rendu, qui réémet aussitôt, recharge la
         // liste, redessine… une boucle infinie qui figeait l'app.
         .onChange(of: downloads.jobs.filter { $0.phase == .finished }.map(\.id)) {
+            libraryVM.load()
+        }
+        // Une demande de téléchargement crée sa ligne « En attente » ; une
+        // annulation peut la retirer.
+        .onChange(of: downloads.pending.map(\.id)) {
             libraryVM.load()
         }
     }
@@ -171,8 +189,13 @@ struct LibraryView: View {
                 videoRow(video)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        onOpen(video)
-                        isPresented = false
+                        if playsMusicInline && video.isOffline {
+                            musicPlayer.play(video, in: libraryVM.filteredVideos)
+                            showMusicPlayer = true
+                        } else {
+                            onOpen(video)
+                            isPresented = false
+                        }
                     }
                     .listRowBackground(Color.clear)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -240,6 +263,7 @@ struct LibraryView: View {
         defer { newFolderName = ""; folderTargetVideoId = nil }
         guard !trimmed.isEmpty, let id = folderTargetVideoId else { return }
         guard let video = libraryVM.videos.first(where: { $0.id == id }) else { return }
+        LibraryFolderStore.shared.add(trimmed)
         libraryVM.setFolder(trimmed, for: video)
         libraryVM.selectedFolder = trimmed
     }
@@ -247,6 +271,44 @@ struct LibraryView: View {
     // MARK: - Video Row
 
     private func videoRow(_ video: SavedVideo) -> some View {
+        SavedVideoRow(
+            video: video,
+            accent: accent,
+            isCurrentTrack: playsMusicInline && musicPlayer.current?.id == video.id
+        )
+    }
+}
+
+// MARK: - Ligne
+
+/// Une ligne de bibliothèque — miniature, dossier, progression et lecture.
+///
+/// Rien n'y dit si l'élément est téléchargé, ni s'il est en train de l'être :
+/// les favoris musicaux se téléchargent seuls, en silence (cf.
+/// `VideoDownloadService.downloadDueFavorites`). Les builds DEBUG gardent
+/// l'ancien affichage — ⬇︎, statut, « Hors ligne » — pour l'usage perso.
+/// Partagée par `LibraryView` et les dossiers de l'accueil, qui mélangent
+/// vidéos et morceaux.
+struct SavedVideoRow: View {
+    let video: SavedVideo
+    let accent: Color
+    /// Le morceau en cours du lecteur MP3 : marqué d'une onde.
+    let isCurrentTrack: Bool
+    /// Inutile dans la vue d'un dossier : on sait déjà où l'on est.
+    var showsFolderBadge: Bool = true
+
+    @AppStorage("appLanguage") private var lang: String = "en"
+    @ObservedObject private var musicPlayer = OfflineMusicPlayer.shared
+    #if DEBUG
+    @ObservedObject private var downloads = VideoDownloadService.shared
+    private var downloadFormat: DownloadFormat {
+        video.url.contains("music.youtube.com") ? .mp3 : .mp4
+    }
+    #endif
+
+    private func t(_ fr: String, _ en: String) -> String { lang == "fr" ? fr : en }
+
+    var body: some View {
         HStack(spacing: 14) {
             thumbnail(for: video)
             .frame(width: 130, height: 73)
@@ -259,7 +321,11 @@ struct LibraryView: View {
                     .lineLimit(2)
 
                 HStack(spacing: 6) {
-                    if video.isOffline {
+                    #if DEBUG
+                    if VideoDownloadService.showsManualDownloads, !video.isOffline, downloads.isPending(video.id) {
+                        pendingBadge(for: video)
+                    }
+                    if VideoDownloadService.showsManualDownloads, video.isOffline {
                         Label(t("Hors ligne", "Offline"), systemImage: "arrow.down.circle.fill")
                             .font(.caption2)
                             .fontWeight(.semibold)
@@ -269,7 +335,8 @@ struct LibraryView: View {
                             .foregroundStyle(.green)
                             .clipShape(Capsule())
                     }
-                    if !video.folder.isEmpty {
+                    #endif
+                    if showsFolderBadge && !video.folder.isEmpty {
                         Label(video.folder, systemImage: "folder.fill")
                             .font(.caption2)
                             .fontWeight(.semibold)
@@ -305,15 +372,65 @@ struct LibraryView: View {
 
             Spacer(minLength: 0)
 
-            if allowsDownload && !video.isOffline {
-                downloadButton(for: video)
+            #if DEBUG
+            if VideoDownloadService.showsManualDownloads, !video.isOffline {
+                if downloads.isPending(video.id), downloads.job(for: video.id) == nil {
+                    waitingButton(for: video)
+                } else {
+                    downloadButton(for: video)
+                }
             }
+            #endif
 
-            Image(systemName: "play.circle.fill")
+            // Le morceau en cours est marqué d'une onde, comme dans Spotify.
+            Image(systemName: isCurrentTrack ? "waveform" : "play.circle.fill")
                 .font(.title2)
                 .foregroundStyle(accent)
+                .symbolEffect(.variableColor.iterative, isActive: isCurrentTrack && musicPlayer.isPlaying)
         }
         .padding(.vertical, 6)
+    }
+
+    #if DEBUG
+    /// « En attente » tant que son tour n'est pas venu, « Préparation » pendant
+    /// la conversion, « 42 % » pendant que le fichier arrive.
+    private func pendingBadge(for video: SavedVideo) -> some View {
+        let job = downloads.job(for: video.id)
+        let label = job.map {
+            $0.phase == .downloading
+                ? t("\(Int(($0.progress * 100).rounded())) %", "\(Int(($0.progress * 100).rounded()))%")
+                : t("Préparation", "Preparing")
+        } ?? t("En attente", "Pending")
+        return HStack(spacing: 4) {
+            Image(systemName: job == nil ? "clock" : "arrow.down.circle")
+            Text(label).lineLimit(1)
+        }
+            .layoutPriority(1)
+            .font(.caption2.monospacedDigit())
+            .fontWeight(.semibold)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Color.orange.opacity(0.18))
+            .foregroundStyle(.orange)
+            .clipShape(Capsule())
+    }
+
+    /// Horloge d'une demande qui attend son tour (ou le retour dans l'app,
+    /// après une coupure). Un appui propose de l'annuler.
+    private func waitingButton(for video: SavedVideo) -> some View {
+        Menu {
+            Button(role: .destructive) {
+                VideoDownloadService.shared.cancel(video.id)
+            } label: {
+                Label(t("Annuler le téléchargement", "Cancel Download"), systemImage: "xmark.circle")
+            }
+        } label: {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.title3)
+                .foregroundStyle(.orange)
+                .padding(6)
+        }
+        .buttonStyle(.borderless)
     }
 
     /// ⬇︎ à côté du bouton lecture ; devient un anneau de progression pendant
@@ -348,6 +465,7 @@ struct LibraryView: View {
             .tint(Color(.secondaryLabel))
         }
     }
+    #endif
 
     /// Miniature locale si la vidéo a été téléchargée (elle doit s'afficher
     /// sans réseau), sinon celle de YouTube.

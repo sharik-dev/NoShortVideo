@@ -69,6 +69,20 @@ final class VideoStorageService {
         }
     }
 
+    /// Renomme un dossier (ou le vide si `to` est vide) sur tous les éléments
+    /// qui y sont rangés.
+    func renameFolder(from old: String, to new: String) {
+        queue.sync {
+            var videos = loadAllUnsafe()
+            var changed = false
+            for i in videos.indices where videos[i].folder == old {
+                videos[i].folder = new
+                changed = true
+            }
+            if changed { writeUnsafe(videos) }
+        }
+    }
+
     /// Deletes a video by its ID — and its MP4, if it was downloaded.
     func delete(videoId: String) {
         queue.sync {

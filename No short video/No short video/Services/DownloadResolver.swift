@@ -10,15 +10,32 @@ import WebKit
 
 /// Un site convertisseur qu'on pilote en coulisse pour obtenir l'adresse d'un
 /// MP4. L'ordre de `allCases` est l'ordre d'essai : ytdown d'abord, YT1s en
-/// secours.
+/// secours, puis trois sites de dernier recours qui ne livrent que du 360p —
+/// YouTube ne sert plus la vidéo et le son dans un même fichier au-delà.
 enum DownloadProvider: String, CaseIterable {
     case ytdown
     case yt1s
+    case ytultra
+    case snapyt
+    case savefrom
 
     var displayName: String {
         switch self {
-        case .ytdown: return "YTDown"
-        case .yt1s:   return "YT1s"
+        case .ytdown:   return "YTDown"
+        case .yt1s:     return "YT1s"
+        case .ytultra:  return "YTUltra"
+        case .snapyt:   return "SnapYT"
+        case .savefrom: return "SaveFrom"
+        }
+    }
+
+    /// Les sites de secours ne donnent le son qu'en M4A : rangé sous un nom
+    /// en `.mp3`, le lecteur de musique le refuserait. On les réserve à la
+    /// vidéo.
+    func supports(_ format: DownloadFormat) -> Bool {
+        switch self {
+        case .ytdown, .yt1s:                return true
+        case .ytultra, .snapyt, .savefrom:  return format == .mp4
         }
     }
 
@@ -34,6 +51,12 @@ enum DownloadProvider: String, CaseIterable {
             return URL(string: "https://app.ytdown.to/fr38/")!
         case .yt1s:
             return URL(string: "https://embed.dlsrv.online/v1/full?videoId=\(videoId)")!
+        case .ytultra:
+            return URL(string: "https://www.ytultra.com/fr/youtube-video-downloader/")!
+        case .snapyt:
+            return URL(string: "https://www.snapyt.app/")!
+        case .savefrom:
+            return URL(string: "https://fr.savefrom.net/351Dr/")!
         }
     }
 
@@ -41,14 +64,17 @@ enum DownloadProvider: String, CaseIterable {
     /// redirection publicitaire : on l'annule sans rien charger.
     var allowedHosts: [String] {
         switch self {
-        case .ytdown: return ["ytdown.to", "challenges.cloudflare.com"]
-        case .yt1s:   return ["dlsrv.online"]
+        case .ytdown:   return ["ytdown.to", "challenges.cloudflare.com"]
+        case .yt1s:     return ["dlsrv.online"]
+        case .ytultra:  return ["ytultra.com"]
+        case .snapyt:   return ["snapyt.app"]
+        case .savefrom: return ["savefrom.net"]
         }
     }
 }
 
 /// Ce qu'on demande au site : une vidéo MP4 (YouTube) ou un MP3 (YouTube Music).
-enum DownloadFormat: String {
+enum DownloadFormat: String, Codable {
     case mp4
     case mp3
 
@@ -476,6 +502,107 @@ extension DownloadResolver {
               }
             }
             post({type:'error', message:'conversion too long'});
+          })();
+        })();
+        """
+
+        case .ytultra:
+            return common + """
+          // La page n'est qu'une façade : son API répond en JSON avec la liste
+          // des flux, `Access-Control-Allow-Origin: *`. Le seul flux vidéo qui
+          // porte aussi le son est l'itag 18 (360p) — les autres sont muets.
+          (async () => {
+            post({type:'progress', value: 0.1});
+            let j;
+            try {
+              const r = await fetch('https://api.ytultra.com/ikool/youtube/download', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url: 'https://www.youtube.com/watch?v=' + VIDEO_ID})
+              });
+              j = await r.json();
+            } catch(e) { post({type:'error', message:'api: ' + e}); return; }
+            if (!j || j.code !== '0000') { post({type:'error', message: (j && j.msg) || 'api error'}); return; }
+            const medias = (j.data && j.data.medias) || [];
+            const m = medias.find(x => /[?&]itag=(18|22)(&|$)/.test(x.url || ''));
+            if (!m) { post({type:'error', message:'no muxed mp4'}); return; }
+            post({type:'result', url: m.url, name: ((j.data.title || VIDEO_ID) + '.mp4')});
+          })();
+        })();
+        """
+
+        case .snapyt:
+            return common + """
+          // Deux pages : l'accueil (formulaire) renvoie vers /video-preview/, où
+          // chaque format est une <option>. Le script tourne sur les deux.
+          (async () => {
+            if (location.pathname.startsWith('/video-preview')) {
+              const select = await waitFor(() => document.querySelector('#fmt-select'), 20000);
+              if (!select) { post({type:'error', message:'no formats'}); return; }
+              // Seule l'option « video+audio » a le son. `data-url` pointe droit
+              // sur YouTube ; `data-force` (le relais du site) répond 403 hors
+              // de sa page, il ne sert qu'en dernier recours.
+              const opt = [...select.options].find(o => o.dataset.kind === 'video+audio');
+              const url = opt && (opt.dataset.url || opt.dataset.force);
+              if (!url) { post({type:'error', message:'no muxed mp4'}); return; }
+              post({type:'result', url: url, name: ''});
+              return;
+            }
+            const input = await waitFor(() => document.querySelector('#video-url'), 20000);
+            if (!input) { post({type:'error', message:'form not found'}); return; }
+            // Le clic n'est intercepté qu'une fois les scripts du site chargés.
+            await waitFor(() => document.readyState === 'complete', 20000);
+            await sleep(600);
+            input.value = 'https://www.youtube.com/watch?v=' + VIDEO_ID;
+            input.dispatchEvent(new Event('input', {bubbles:true}));
+            document.querySelector('#submit-url').click();
+            post({type:'progress', value: 0.2});
+            // La réponse fait naviguer la page ; sinon le site affiche l'erreur.
+            for (let i = 0; i < 150; i++) {
+              await sleep(400); post({type:'alive'});
+              const err = document.querySelector('.ytx-error, [role=alert]');
+              if (err && err.innerText.trim()) { post({type:'error', message: err.innerText.trim().slice(0, 120)}); return; }
+            }
+            post({type:'error', message:'no redirect'});
+          })();
+        })();
+        """
+
+        case .savefrom:
+            return common + """
+          // Le formulaire est intercepté en jQuery ; les liens arrivent dans
+          // `.result-box`, chacun `a.link-download` avec sa qualité.
+          (async () => {
+            const input = await waitFor(() => document.querySelector('#sf_url'), 20000);
+            if (!input) { post({type:'error', message:'form not found'}); return; }
+            await waitFor(() => document.readyState === 'complete' && window.jQuery, 20000);
+            await sleep(800);
+            input.value = 'https://www.youtube.com/watch?v=' + VIDEO_ID;
+            input.dispatchEvent(new Event('input', {bubbles:true}));
+            document.querySelector('#sf_submit').click();
+            post({type:'progress', value: 0.2});
+
+            // Un lien vidéo avec le son : on écarte l'audio seul et les flux
+            // marqués muets (« no audio », « sans son »).
+            // Les liens qui restent sur savefrom.net (« HD ou MP3 », convertisseur)
+            // ne mènent qu'à une page : seul un lien vers ailleurs est un fichier.
+            let refused = null;
+            const links = await waitFor(() => {
+              const box = document.querySelector('.result-box');
+              if (box && /can ?not be downloaded|impossible de télécharger|not supported/i.test(box.innerText)) {
+                refused = box.innerText.trim().slice(0, 120); return true;
+              }
+              const l = [...document.querySelectorAll('.result-box a.link-download, .result-box a[download]')]
+                .filter(a => /^https?:/.test(a.href) && !/(^|\\.)savefrom\\.net$/i.test(a.hostname))
+                .filter(a => !/audio|m4a|mp3|webm|sans son|no.?audio/i.test((a.dataset.type || '') + ' ' + a.innerText + ' ' + (a.getAttribute('download') || '')));
+              return l.length ? l : null;
+            }, 40000);
+            if (refused) { post({type:'error', message: refused}); return; }
+            if (!links) {
+              const r = document.querySelector('.result-box, #sf_result');
+              post({type:'error', message:'no formats: ' + (r ? r.innerText.slice(0, 120) : '')}); return;
+            }
+            const a = pick(links, l => { const m = ((l.dataset.quality || '') + ' ' + l.innerText).match(/(\\d{3,4})p?/); return m ? +m[1] : 0; });
+            post({type:'result', url: a.href, name: a.getAttribute('download') || ''});
           })();
         })();
         """

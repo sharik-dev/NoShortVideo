@@ -16,6 +16,10 @@ final class WebViewNavigationDelegate: NSObject, WKNavigationDelegate {
     /// Called when a page finishes loading (used for resume-seek).
     var onDidFinish: (() -> Void)?
 
+    /// Remplace le rechargement par défaut quand le processus de rendu meurt —
+    /// YouTube s'en sert pour reprendre la vidéo là où elle en était.
+    var onWebContentProcessTerminated: ((WKWebView) -> Void)?
+
     init(state: WebViewState) {
         self.state = state
     }
@@ -145,6 +149,10 @@ final class WebViewNavigationDelegate: NSObject, WKNavigationDelegate {
     /// ce qui arrivait sur un fil Instagram longuement déroulé. Sans ce
     /// rattrapage, la webview reste blanche définitivement : l'app « coupe ».
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if let handler = onWebContentProcessTerminated {
+            handler(webView)
+            return
+        }
         if let url = webView.url {
             webView.load(URLRequest(url: url))
         } else {

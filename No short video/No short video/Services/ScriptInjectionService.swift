@@ -359,6 +359,60 @@ enum ScriptInjectionService {
     }
 
     /// JavaScript to seek the video to a specific time.
+    /// État du lecteur, relevé chaque seconde par le chien de garde de
+    /// `YouTubeWebViewModel` : position, pause, et surtout `readyState` — en
+    /// dessous de 3 le lecteur n'a pas de quoi avancer, c'est la roue qui
+    /// tourne à l'écran.
+    static var playbackProbeScript: String {
+        """
+        (function() {
+            var v = document.querySelector('video');
+            if (!v) return JSON.stringify({ has: false });
+            var p = document.querySelector('.html5-video-player');
+            var ad = !!(p && (p.classList.contains('ad-showing') || p.classList.contains('ad-interrupting')));
+            return JSON.stringify({
+                has: true,
+                t: isFinite(v.currentTime) ? v.currentTime : 0,
+                d: isFinite(v.duration) ? v.duration : 0,
+                paused: v.paused,
+                ended: v.ended,
+                rs: v.readyState,
+                ad: ad
+            });
+        })();
+        """
+    }
+
+    /// Reprise après rechargement : attend que le lecteur existe (YouTube le
+    /// monte après `didFinish`), se place à `seconds`, puis vérifie une
+    /// seconde et demie plus tard que YouTube ne l'a pas renvoyé au début en
+    /// finissant de s'initialiser.
+    static func resumeScript(to seconds: Double, play: Bool) -> String {
+        """
+        (function() {
+            var target = \(seconds), shouldPlay = \(play ? "true" : "false"), tries = 0;
+            function apply(v) {
+                if (Math.abs(v.currentTime - target) > 1.5) v.currentTime = target;
+                if (shouldPlay && v.paused) { var r = v.play(); if (r && r.catch) r.catch(function(){}); }
+                if (!shouldPlay && !v.paused) v.pause();
+            }
+            function go() {
+                var v = document.querySelector('video');
+                if (v && v.readyState >= 1) {
+                    apply(v);
+                    setTimeout(function() {
+                        var w = document.querySelector('video');
+                        if (w && w.currentTime < target - 3) apply(w);
+                    }, 1500);
+                    return;
+                }
+                if (++tries < 60) setTimeout(go, 250);
+            }
+            go();
+        })();
+        """
+    }
+
     static func seekScript(to seconds: Double) -> String {
         """
         (function() {

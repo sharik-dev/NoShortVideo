@@ -12,32 +12,16 @@ struct PiPFloatingButton: View {
 
     @ObservedObject var viewModel: YouTubeWebViewModel
 
-    @State     private var btnOffset: CGSize  = .zero
-    @GestureState private var btnDrag: CGSize = .zero
+    @State private var btnOffset: CGSize = .zero
 
     var body: some View {
-        Button {
-            viewModel.triggerPiP()
-        } label: {
-            Image(systemName: "pip.enter")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color(.label))
-                .frame(width: 38, height: 38)
-                .background(glassBackground)
-        }
-        .buttonStyle(.plain)
-        .offset(
-            x: btnOffset.width  + btnDrag.width,
-            y: btnOffset.height + btnDrag.height
-        )
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 4)
-                .updating($btnDrag) { value, state, _ in state = value.translation }
-                .onEnded { value in
-                    btnOffset.width  += value.translation.width
-                    btnOffset.height += value.translation.height
-                }
-        )
+        Image(systemName: "pip.enter")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(Color(.label))
+            .frame(width: 38, height: 38)
+            .background(glassBackground)
+            .contentShape(Rectangle())
+            .floatingDrag(offset: $btnOffset) { viewModel.triggerPiP() }
     }
 
     // Glass background matching toolbar style
