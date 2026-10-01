@@ -1,0 +1,5 @@
+No account needed. On the home screen, tap YouTube or YT Music.
+
+The red bookmark in the bottom bar saves the current video or song to Library (books icon). Shorts are hidden on every supported site.
+
+Note: a song bookmarked from YT Music is cached on the device about five minutes later, so it can keep playing without a connection. There is no download button, nothing else is downloaded, and cached songs only play inside the app.

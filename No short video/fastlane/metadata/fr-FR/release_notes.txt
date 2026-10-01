@@ -1,0 +1,3 @@
+• Une Librairie repensée, rangée en dossiers
+• Des statistiques d'usage quotidiennes
+• Des améliorations de stabilité

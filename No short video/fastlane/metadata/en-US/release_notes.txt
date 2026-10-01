@@ -1,0 +1,3 @@
+• A redesigned Library, organized in folders
+• Daily usage stats
+• Stability improvements
